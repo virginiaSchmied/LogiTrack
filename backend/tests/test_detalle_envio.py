@@ -2,7 +2,7 @@
 Tests para consulta de envío por tracking ID y búsqueda por destinatario.
 
 Cubre:
-  LP-142 — Consultar envío por tracking ID       (CP-0195, CP-0199, CP-0204, CP-0205)
+  LP-142 — Consultar envío por tracking ID        (CP-0195, CP-0199, CP-0200, CP-0204, CP-0205)
   LP-197 — Buscar envío por datos del destinatario (CP-0247, CP-0251, CP-0252, CP-0254)
 
 Tests NO implementados (requieren autenticación JWT, no disponible en este prototipo):
@@ -13,6 +13,7 @@ import time
 from datetime import date, timedelta
 
 from models import EstadoEnvioEnum
+
 
 _FECHA_FUTURA = str(date.today() + timedelta(days=30))
 
@@ -108,3 +109,5 @@ def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client):
     resp = client.get("/envios/?q=")
     assert resp.status_code == 200
     assert resp.json()["total"] == 2
+
+

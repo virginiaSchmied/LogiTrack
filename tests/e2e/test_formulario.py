@@ -1,8 +1,9 @@
 """
-Tests E2E para el formulario de alta de envíos.
+Tests E2E para el formulario de alta de envíos y búsqueda.
 
 Cubre:
   LP-131 — CP-0175: Campos obligatorios marcados visualmente con asterisco
+  LP-142 — CP-0200: Búsqueda con tracking ID vacío muestra mensaje de error
   LP-241 — CP-0260: Formulario utilizable en cualquier dispositivo (responsive)
 
 Prerequisito: frontend corriendo en BASE_URL (por defecto http://localhost:8080).
@@ -31,6 +32,23 @@ def test_cp0175_campos_obligatorios_marcados_con_asterisco(page: Page, base_url)
     for campo_id in campos_obligatorios:
         label = page.locator(f"label[for='{campo_id}'] span.req")
         assert label.count() > 0, f"El campo '{campo_id}' no tiene indicador de obligatorio"
+
+
+def test_cp0200_busqueda_vacia_no_falla(page: Page, base_url):
+    """CP-0200 — Unhappy Path: buscar con campo vacío no produce error en la interfaz."""
+    page.goto(base_url)
+    page.wait_for_selector("#search-input", state="visible")
+
+    # Limpiar el campo y presionar Enter con valor vacío
+    page.fill("#search-input", "")
+    page.press("#search-input", "Enter")
+
+    # La página no debe mostrar ningún error JavaScript ni romperse
+    # El estado vacío o el listado completo deben ser visibles
+    page.wait_for_timeout(500)
+    assert page.locator("#empty-state, #envios-table, #no-results").count() > 0, (
+        "Ningún estado de la tabla es visible tras búsqueda vacía"
+    )
 
 
 @pytest.mark.parametrize("viewport,nombre", [

@@ -52,6 +52,8 @@ class DireccionOut(BaseModel):
 # ── Envío ────────────────────────────────────────────────────────────────────
 
 class EnvioCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
     remitente:              str = Field(..., min_length=1, max_length=255)
     destinatario:           str = Field(..., min_length=1, max_length=255)
     fecha_entrega_estimada: date

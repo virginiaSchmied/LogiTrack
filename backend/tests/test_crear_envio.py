@@ -52,13 +52,6 @@ def test_cp0004_remitente_vacio_retorna_422(client):
     assert client.post("/envios/", json=payload).status_code == 422
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "CP-0005: la validación de espacios en blanco no está implementada en el backend. "
-        "remitente='   ' pasa min_length=1. Pendiente agregar strip_whitespace al schema."
-    ),
-)
 def test_cp0005_remitente_solo_espacios_retorna_422(client):
     """CP-0005 — Edge Case: remitente con solo espacios debe ser rechazado con 422."""
     payload = {**PAYLOAD_VALIDO, "remitente": "   "}
