@@ -73,7 +73,6 @@ async function cargarEnvios(q = '') {
       table.style.display = 'none';
       empty.style.display = '';
       noRes.style.display = 'none';
-      // Restaurar texto por defecto del empty state
       empty.querySelector('.e-title').textContent = 'No hay envíos registrados';
       empty.querySelector('.e-desc').textContent  = 'Registrá el primer envío usando el botón de arriba.';
       return;
@@ -218,6 +217,25 @@ async function submitForm() {
     return;
   }
 
+  // Validar que origen y destino no sean la misma dirección
+  const g = id => document.getElementById(id).value.trim().toLowerCase();
+  const gExact = id => document.getElementById(id).value.trim();
+  const mismaDireccion = (
+    g('origen-calle')     === g('destino-calle')     &&
+    gExact('origen-numero') === gExact('destino-numero') &&
+    g('origen-ciudad')    === g('destino-ciudad')    &&
+    g('origen-provincia') === g('destino-provincia') &&
+    gExact('origen-cp')    === gExact('destino-cp')
+  );
+  if (mismaDireccion) {
+    const errEl = document.getElementById('err-destino-calle');
+    errEl.textContent = 'La dirección de destino no puede ser igual a la de origen.';
+    errEl.classList.add('visible');
+    document.getElementById('destino-calle').setAttribute('aria-invalid', 'true');
+    document.getElementById('destino-calle').focus();
+    return;
+  }
+
   const payload = {
     remitente:              document.getElementById('remitente').value.trim(),
     destinatario:           document.getElementById('destinatario').value.trim(),
@@ -252,7 +270,6 @@ async function submitForm() {
     if (!res.ok) {
       const err = await res.json();
       console.error('Error del servidor:', err);
-      // Si Pydantic devuelve errores de campo, mostrarlos inline
       if (Array.isArray(err.detail)) {
         err.detail.forEach(d => {
           const campo = d.loc?.[d.loc.length - 1];
