@@ -1,58 +1,19 @@
 'use strict';
 
-// ─── Datos mockeados ───────────────────────────────────────────────────────
-let envios = [
-  {
-    id: 'LT-00000001',
-    remitente: 'Carlos Ruiz',
-    destinatario: 'Ana Torres',
-    origen: { calle: 'Belgrano', numero: '123', ciudad: 'Buenos Aires', provincia: 'CABA', cp: '1092' },
-    destino: { calle: 'Thames', numero: '456', ciudad: 'Buenos Aires', provincia: 'CABA', cp: '1414' },
-    estado: 'ENTREGADO',
-    fechaEntrega: '2025-03-10',
-  },
-  {
-    id: 'LT-00000002',
-    remitente: 'Sofía Herrera',
-    destinatario: 'Lucas Medina',
-    origen: { calle: 'Corrientes', numero: '890', ciudad: 'Rosario', provincia: 'Santa Fe', cp: '2000' },
-    destino: { calle: 'Colón', numero: '321', ciudad: 'Córdoba', provincia: 'Córdoba', cp: '5000' },
-    estado: 'EN_TRANSITO',
-    fechaEntrega: '2025-03-20',
-  },
-  {
-    id: 'LT-00000003',
-    remitente: 'Empresa ABC',
-    destinatario: 'Pedro Gómez',
-    origen: { calle: 'San Martín', numero: '1200', ciudad: 'Mendoza', provincia: 'Mendoza', cp: '5500' },
-    destino: { calle: 'Rivadavia', numero: '700', ciudad: 'San Luis', provincia: 'San Luis', cp: '5700' },
-    estado: 'REGISTRADO',
-    fechaEntrega: '2025-03-25',
-  },
-  {
-    id: 'LT-00000004',
-    remitente: 'Laura Vidal',
-    destinatario: 'Martín Cruz',
-    origen: { calle: 'Vélez Sársfield', numero: '50', ciudad: 'Córdoba', provincia: 'Córdoba', cp: '5000' },
-    destino: { calle: 'Maipú', numero: '300', ciudad: 'Tucumán', provincia: 'Tucumán', cp: '4000' },
-    estado: 'RETRASADO',
-    fechaEntrega: '2025-03-17',
-  },
-];
+// ─── Config ───────────────────────────────────────────────────────────────────
+const API_BASE = "http://18.191.173.105:8000";
 
-let counter = envios.length + 1;
-
-// ─── Mapa de badges por estado ───────────────────────────────────────────────
+// ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {
-  'REGISTRADO':    'badge-registrado',
-  'EN_TRANSITO':   'badge-transito',
-  'EN_SUCURSAL':   'badge-sucursal',
+  'REGISTRADO':      'badge-registrado',
+  'EN_TRANSITO':     'badge-transito',
+  'EN_SUCURSAL':     'badge-sucursal',
   'EN_DISTRIBUCION': 'badge-distribucion',
-  'ENTREGADO':     'badge-entregado',
-  'RETRASADO':     'badge-retrasado',
-  'CANCELADO':     'badge-cancelado',
-  'BLOQUEADO':     'badge-bloqueado',
-  'ELIMINADO':     'badge-eliminado',
+  'ENTREGADO':       'badge-entregado',
+  'RETRASADO':       'badge-retrasado',
+  'CANCELADO':       'badge-cancelado',
+  'BLOQUEADO':       'badge-bloqueado',
+  'ELIMINADO':       'badge-eliminado',
 };
 
 const BADGE_LABEL = {
@@ -67,19 +28,14 @@ const BADGE_LABEL = {
   'ELIMINADO':       'Eliminado',
 };
 
-// ─── Generar tracking ID ─────────────────────────────────────────────────────
-function generateTID() {
-  const n = String(counter).padStart(8, '0');
-  return `LT-${n}`;
-}
-
-// ─── Navegación ──────────────────────────────────────────────────────────────
+// ─── Navegación ───────────────────────────────────────────────────────────────
 function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-tabs button').forEach(b => {
     b.classList.remove('active');
     b.removeAttribute('aria-current');
   });
+
   document.getElementById('view-' + viewName).classList.add('active');
   const tab = document.getElementById('tab-' + viewName);
   tab.classList.add('active');
@@ -88,51 +44,73 @@ function showView(viewName) {
   if (viewName === 'form') resetForm();
   if (viewName === 'list') {
     document.getElementById('search-input').value = '';
-    renderTable();
+    cargarEnvios();
   }
 }
 
-// ─── Render tabla ─────────────────────────────────────────────────────────────
-function renderTable(filter = '') {
+// ─── Carga de envíos desde la API ─────────────────────────────────────────────
+async function cargarEnvios(q = '') {
   const tbody = document.getElementById('table-body');
   const table = document.getElementById('envios-table');
   const empty = document.getElementById('empty-state');
   const noRes = document.getElementById('no-results');
   const chip  = document.getElementById('count-chip');
 
-  chip.textContent = envios.length;
+  try {
+    const url = q.trim()
+      ? `${API_BASE}/envios?q=${encodeURIComponent(q.trim())}`
+      : `${API_BASE}/envios`;
 
-  const q = filter.toLowerCase().trim();
-  const filtered = q
-    ? envios.filter(e =>
-        e.id.toLowerCase().includes(q) ||
-        e.destinatario.toLowerCase().includes(q) ||
-        e.remitente.toLowerCase().includes(q)
-      )
-    : envios;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Error ${res.status}`);
 
-  if (envios.length === 0) {
-    table.style.display = 'none'; empty.style.display = ''; noRes.style.display = 'none'; return;
+    const data = await res.json();
+    const envios = data.items;
+
+    chip.textContent = data.total;
+
+    if (data.total === 0 && !q.trim()) {
+      table.style.display = 'none';
+      empty.style.display = '';
+      noRes.style.display = 'none';
+      // Restaurar texto por defecto del empty state
+      empty.querySelector('.e-title').textContent = 'No hay envíos registrados';
+      empty.querySelector('.e-desc').textContent  = 'Registrá el primer envío usando el botón de arriba.';
+      return;
+    }
+
+    if (envios.length === 0) {
+      table.style.display = 'none';
+      empty.style.display = 'none';
+      noRes.style.display = '';
+      return;
+    }
+
+    empty.style.display = 'none';
+    noRes.style.display = 'none';
+    table.style.display = '';
+
+    tbody.innerHTML = envios.map(e => `
+      <tr>
+        <td data-label="Tracking ID"><span class="tid-text">${escHtml(e.tracking_id)}</span></td>
+        <td data-label="Remitente">${escHtml(e.remitente)}</td>
+        <td data-label="Destinatario">${escHtml(e.destinatario)}</td>
+        <td data-label="Ciudad Origen" class="sub-text">${escHtml(e.ciudad_origen)}, ${escHtml(e.provincia_origen)}</td>
+        <td data-label="Ciudad Destino" class="sub-text">${escHtml(e.ciudad_destino)}, ${escHtml(e.provincia_destino)}</td>
+        <td data-label="Estado"><span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span></td>
+        <td data-label="Entrega estimada" class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</td>
+      </tr>
+    `).join('');
+
+  } catch (err) {
+    console.error('Error al cargar envíos:', err);
+    chip.textContent = '—';
+    table.style.display = 'none';
+    noRes.style.display = 'none';
+    empty.style.display = '';
+    empty.querySelector('.e-title').textContent = 'Error al conectar con el servidor';
+    empty.querySelector('.e-desc').textContent  = 'Verificá que el backend esté corriendo e intentá de nuevo.';
   }
-  if (filtered.length === 0) {
-    table.style.display = 'none'; empty.style.display = 'none'; noRes.style.display = ''; return;
-  }
-
-  empty.style.display = 'none';
-  noRes.style.display = 'none';
-  table.style.display = '';
-
-  tbody.innerHTML = filtered.map(e => `
-    <tr>
-      <td data-label="Tracking ID"><span class="tid-text">${escHtml(e.id)}</span></td>
-      <td data-label="Remitente">${escHtml(e.remitente)}</td>
-      <td data-label="Destinatario">${escHtml(e.destinatario)}</td>
-      <td data-label="Ciudad Origen" class="sub-text">${escHtml(e.origen.ciudad)}, ${escHtml(e.origen.provincia)}</td>
-      <td data-label="Ciudad Destino" class="sub-text">${escHtml(e.destino.ciudad)}, ${escHtml(e.destino.provincia)}</td>
-      <td data-label="Estado"><span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span></td>
-      <td data-label="Entrega estimada" class="mono-text">${escHtml(formatFecha(e.fechaEntrega))}</td>
-    </tr>
-  `).join('');
 }
 
 function formatFecha(iso) {
@@ -141,26 +119,21 @@ function formatFecha(iso) {
   return `${d}/${m}/${y}`;
 }
 
-// ─── Filtro en tiempo real ────────────────────────────────────────────────────
-function filterTable() {
-  renderTable(document.getElementById('search-input').value);
-}
-
 // ─── Definición de campos y sus validaciones ──────────────────────────────────
 const FIELDS = {
-  remitente:          { label: 'nombre del remitente',       validate: validateText },
-  destinatario:       { label: 'nombre del destinatario',    validate: validateText },
-  'fecha-entrega':    { label: 'fecha estimada de entrega',  validate: validateFecha },
-  'origen-calle':     { label: 'calle de origen',            validate: validateCalle },
-  'origen-numero':    { label: 'número de origen',           validate: validateNumero },
-  'origen-cp':        { label: 'código postal de origen',    validate: validateCP },
-  'origen-ciudad':    { label: 'ciudad de origen',           validate: validateTextoSimple },
-  'origen-provincia': { label: 'provincia de origen',        validate: validateTextoSimple },
-  'destino-calle':    { label: 'calle de destino',           validate: validateCalle },
-  'destino-numero':   { label: 'número de destino',          validate: validateNumero },
-  'destino-cp':       { label: 'código postal de destino',   validate: validateCP },
-  'destino-ciudad':   { label: 'ciudad de destino',          validate: validateTextoSimple },
-  'destino-provincia':{ label: 'provincia de destino',       validate: validateTextoSimple },
+  remitente:           { label: 'nombre del remitente',      validate: validateText },
+  destinatario:        { label: 'nombre del destinatario',   validate: validateText },
+  'fecha-entrega':     { label: 'fecha estimada de entrega', validate: validateFecha },
+  'origen-calle':      { label: 'calle de origen',           validate: validateCalle },
+  'origen-numero':     { label: 'número de origen',          validate: validateNumero },
+  'origen-cp':         { label: 'código postal de origen',   validate: validateCP },
+  'origen-ciudad':     { label: 'ciudad de origen',          validate: validateTextoSimple },
+  'origen-provincia':  { label: 'provincia de origen',       validate: validateTextoSimple },
+  'destino-calle':     { label: 'calle de destino',          validate: validateCalle },
+  'destino-numero':    { label: 'número de destino',         validate: validateNumero },
+  'destino-cp':        { label: 'código postal de destino',  validate: validateCP },
+  'destino-ciudad':    { label: 'ciudad de destino',         validate: validateTextoSimple },
+  'destino-provincia': { label: 'provincia de destino',      validate: validateTextoSimple },
 };
 
 // ─── Funciones de validación ──────────────────────────────────────────────────
@@ -204,7 +177,7 @@ function validateFecha(val, label) {
   return null;
 }
 
-// ─── Validar un campo individual ─────────────────────────────────────────────
+// ─── Validar un campo individual ──────────────────────────────────────────────
 function validateField(id) {
   const input = document.getElementById(id);
   const error = document.getElementById('err-' + id);
@@ -231,8 +204,8 @@ function clearFieldError(id) {
   error.classList.remove('visible');
 }
 
-// ─── Submit ───────────────────────────────────────────────────────────────────
-function submitForm() {
+// ─── Submit → POST /envios ────────────────────────────────────────────────────
+async function submitForm() {
   const allFields = Object.keys(FIELDS);
   const valid = allFields.map(validateField).every(Boolean);
 
@@ -245,32 +218,66 @@ function submitForm() {
     return;
   }
 
-  const tid = generateTID();
-  envios.unshift({
-    id: tid,
-    remitente:    document.getElementById('remitente').value.trim(),
-    destinatario: document.getElementById('destinatario').value.trim(),
-    fechaEntrega: document.getElementById('fecha-entrega').value,
-    origen: {
-      calle:    document.getElementById('origen-calle').value.trim(),
-      numero:   document.getElementById('origen-numero').value.trim(),
-      ciudad:   document.getElementById('origen-ciudad').value.trim(),
-      provincia:document.getElementById('origen-provincia').value.trim(),
-      cp:       document.getElementById('origen-cp').value.trim(),
+  const payload = {
+    remitente:              document.getElementById('remitente').value.trim(),
+    destinatario:           document.getElementById('destinatario').value.trim(),
+    fecha_entrega_estimada: document.getElementById('fecha-entrega').value,
+    direccion_origen: {
+      calle:         document.getElementById('origen-calle').value.trim(),
+      numero:        document.getElementById('origen-numero').value.trim(),
+      ciudad:        document.getElementById('origen-ciudad').value.trim(),
+      provincia:     document.getElementById('origen-provincia').value.trim(),
+      codigo_postal: document.getElementById('origen-cp').value.trim(),
     },
-    destino: {
-      calle:    document.getElementById('destino-calle').value.trim(),
-      numero:   document.getElementById('destino-numero').value.trim(),
-      ciudad:   document.getElementById('destino-ciudad').value.trim(),
-      provincia:document.getElementById('destino-provincia').value.trim(),
-      cp:       document.getElementById('destino-cp').value.trim(),
+    direccion_destino: {
+      calle:         document.getElementById('destino-calle').value.trim(),
+      numero:        document.getElementById('destino-numero').value.trim(),
+      ciudad:        document.getElementById('destino-ciudad').value.trim(),
+      provincia:     document.getElementById('destino-provincia').value.trim(),
+      codigo_postal: document.getElementById('destino-cp').value.trim(),
     },
-    estado: 'REGISTRADO',
-  });
+  };
 
-  counter++;
-  showToast(tid);
-  setTimeout(() => showView('list'), 1800);
+  const btnSubmit = document.querySelector('#alta-form button[type="submit"]');
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Registrando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      console.error('Error del servidor:', err);
+      // Si Pydantic devuelve errores de campo, mostrarlos inline
+      if (Array.isArray(err.detail)) {
+        err.detail.forEach(d => {
+          const campo = d.loc?.[d.loc.length - 1];
+          const errorEl = document.getElementById('err-' + campo);
+          if (errorEl) {
+            errorEl.textContent = d.msg;
+            errorEl.classList.add('visible');
+            document.getElementById(campo)?.setAttribute('aria-invalid', 'true');
+          }
+        });
+      }
+      return;
+    }
+
+    const envio = await res.json();
+    showToast(envio.tracking_id);
+    setTimeout(() => showView('list'), 1800);
+
+  } catch (err) {
+    console.error('Error de red:', err);
+    alert('No se pudo conectar con el servidor. Verificá que el backend esté corriendo.');
+  } finally {
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Registrar envío';
+  }
 }
 
 // ─── Reset form ───────────────────────────────────────────────────────────────
@@ -308,8 +315,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let searchTimer;
   document.getElementById('search-input').addEventListener('input', () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(filterTable, 120);
+    searchTimer = setTimeout(
+      () => cargarEnvios(document.getElementById('search-input').value),
+      300
+    );
   });
 
-  renderTable();
+  cargarEnvios();
 });

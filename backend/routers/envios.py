@@ -12,20 +12,22 @@ router = APIRouter(prefix="/envios", tags=["Envíos"])
 
 
 def _generar_tracking_id(db: Session) -> str:
-    """Genera el próximo tracking ID correlativo en formato LT-00000001."""
-    ultimo = (
-        db.query(Envio)
-        .order_by(Envio.created_at.desc())
-        .first()
-    )
-    if ultimo and ultimo.tracking_id.startswith("LT-"):
-        try:
-            numero = int(ultimo.tracking_id.split("LT-")[1]) + 1
-        except ValueError:
-            numero = 1
-    else:
-        numero = 1
-    return f"LT-{str(numero).zfill(8)}"
+    """
+    Genera el próximo tracking ID correlativo en formato LT-00000001.
+    Toma el número más alto existente en la tabla para evitar colisiones
+    con los datos del seed o cualquier otro envío existente.
+    """
+    todos = db.query(Envio.tracking_id).all()
+    maximo = 0
+    for (tid,) in todos:
+        if tid and tid.startswith("LT-"):
+            try:
+                numero = int(tid.split("LT-")[1])
+                if numero > maximo:
+                    maximo = numero
+            except ValueError:
+                continue
+    return f"LT-{str(maximo + 1).zfill(8)}"
 
 
 def _build_envio_list_item(envio: Envio) -> EnvioListItem:
