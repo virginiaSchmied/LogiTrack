@@ -1,7 +1,7 @@
 'use strict';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "/api";
+const API_BASE = "http://18.191.173.105:8000";
 
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {

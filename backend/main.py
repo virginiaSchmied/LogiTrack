@@ -1,8 +1,5 @@
-from pathlib import Path
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from routers import envios
 
@@ -13,8 +10,6 @@ app = FastAPI(
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
-# Permite que el frontend consuma la API.
-# En producción restringir origins a la URL real del frontend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,16 +19,9 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(envios.router, prefix="/api")
+app.include_router(envios.router)
 
-# ── Frontend estático ─────────────────────────────────────────────────────────
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
-@app.get("/{full_path:path}", include_in_schema=False)
-async def serve_frontend(full_path: str):
-    if full_path.startswith("api/") or full_path == "api":
-        raise HTTPException(status_code=404)
-    file = FRONTEND_DIR / full_path
-    if file.is_file():
-        return FileResponse(file)
-    return FileResponse(FRONTEND_DIR / "index.html")
+@app.get("/", tags=["Health"])
+def health_check():
+    return {"status": "ok", "app": "LogiTrack API"}
