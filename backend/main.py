@@ -24,7 +24,7 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(envios.router)
+app.include_router(envios.router, prefix="/api")
 
 # ── Frontend estático ─────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"

@@ -1,7 +1,7 @@
 'use strict';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "";
+const API_BASE = "/api";
 
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {
