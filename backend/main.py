@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from routers import envios
 
@@ -28,4 +28,10 @@ app.include_router(envios.router)
 
 # ── Frontend estático ─────────────────────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend(full_path: str):
+    file = FRONTEND_DIR / full_path
+    if file.is_file():
+        return FileResponse(file)
+    return FileResponse(FRONTEND_DIR / "index.html")
