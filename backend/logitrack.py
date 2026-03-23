@@ -1,1 +1,0 @@
-print("Bienvenido a logitrack!")
