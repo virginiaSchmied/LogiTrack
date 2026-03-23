@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -31,6 +31,8 @@ FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend(full_path: str):
+    if full_path.startswith("api/") or full_path == "api":
+        raise HTTPException(status_code=404)
     file = FRONTEND_DIR / full_path
     if file.is_file():
         return FileResponse(file)
