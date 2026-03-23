@@ -90,7 +90,7 @@ async function cargarEnvios(q = '') {
     table.style.display = '';
 
     tbody.innerHTML = envios.map(e => `
-      <tr>
+      <tr class="row-clickable" onclick="openDetalle('${escHtml(e.tracking_id)}')" title="Ver detalle de ${escHtml(e.tracking_id)}">
         <td data-label="Tracking ID"><span class="tid-text">${escHtml(e.tracking_id)}</span></td>
         <td data-label="Remitente">${escHtml(e.remitente)}</td>
         <td data-label="Destinatario">${escHtml(e.destinatario)}</td>
@@ -116,6 +116,86 @@ function formatFecha(iso) {
   if (!iso) return '-';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+function formatDatetime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-AR') + ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── Modal de detalle ─────────────────────────────────────────────────────────
+async function openDetalle(trackingId) {
+  const overlay  = document.getElementById('modal-overlay');
+  const body     = document.getElementById('modal-body');
+  const tidEl    = document.getElementById('modal-tracking-id');
+  const estadoEl = document.getElementById('modal-estado-badge');
+
+  tidEl.textContent  = trackingId;
+  estadoEl.innerHTML = '';
+  body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const e = await res.json();
+
+    estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
+
+    body.innerHTML = `
+      <div class="detail-grid">
+
+        <div class="detail-section">
+          <div class="section-title">Datos generales</div>
+          <dl class="detail-list">
+            <div class="dl-row"><dt>Remitente</dt><dd>${escHtml(e.remitente)}</dd></div>
+            <div class="dl-row"><dt>Destinatario</dt><dd>${escHtml(e.destinatario)}</dd></div>
+            <div class="dl-row"><dt>Prioridad</dt><dd>${e.prioridad ? escHtml(e.prioridad) : '<span class="sub-text">No asignada</span>'}</dd></div>
+            <div class="dl-row"><dt>Entrega estimada</dt><dd class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</dd></div>
+            <div class="dl-row"><dt>Registrado</dt><dd class="mono-text">${escHtml(formatDatetime(e.created_at))}</dd></div>
+            <div class="dl-row"><dt>Última actualización</dt><dd class="mono-text">${escHtml(formatDatetime(e.updated_at))}</dd></div>
+          </dl>
+        </div>
+
+        <div class="detail-cols">
+          <div class="detail-section">
+            <div class="section-title">Dirección de origen</div>
+            <dl class="detail-list">
+              <div class="dl-row"><dt>Calle</dt><dd>${escHtml(e.direccion_origen.calle)} ${escHtml(e.direccion_origen.numero)}</dd></div>
+              <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.direccion_origen.ciudad)}</dd></div>
+              <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.direccion_origen.provincia)}</dd></div>
+              <div class="dl-row"><dt>Cód. postal</dt><dd class="mono-text">${escHtml(e.direccion_origen.codigo_postal)}</dd></div>
+            </dl>
+          </div>
+          <div class="detail-section">
+            <div class="section-title">Dirección de destino</div>
+            <dl class="detail-list">
+              <div class="dl-row"><dt>Calle</dt><dd>${escHtml(e.direccion_destino.calle)} ${escHtml(e.direccion_destino.numero)}</dd></div>
+              <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.direccion_destino.ciudad)}</dd></div>
+              <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.direccion_destino.provincia)}</dd></div>
+              <div class="dl-row"><dt>Cód. postal</dt><dd class="mono-text">${escHtml(e.direccion_destino.codigo_postal)}</dd></div>
+            </dl>
+          </div>
+        </div>
+
+      </div>
+    `;
+  } catch (err) {
+    console.error('Error al cargar detalle:', err);
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="e-icon">⚠️</div>
+        <div class="e-title">Error al cargar el detalle</div>
+        <p class="e-desc">${escHtml(err.message)}</p>
+      </div>`;
+  }
+}
+
+function closeDetalle() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ─── Definición de campos y sus validaciones ──────────────────────────────────
@@ -339,4 +419,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   cargarEnvios();
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDetalle();
+  });
 });
