@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="LogiTrack — Sistema de gestión de envíos logísticos"/>
+  <title>LogiTrack</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Ir al contenido principal</a>
+
+<!-- ══ NAVBAR ══ -->
+<nav class="navbar" role="navigation" aria-label="Navegación principal">
+  <div class="navbar-inner">
+    <a href="#" class="navbar-brand" aria-label="LogiTrack inicio">
+      <span class="brand-icon" aria-hidden="true">🚚</span>Logi<span class="brand-accent">Track</span>
+    </a>
+    <div class="nav-tabs" role="tablist" aria-label="Secciones">
+      <button id="tab-list" role="tab" aria-selected="true" aria-controls="view-list" class="active" onclick="showView('list')">📦 Envíos</button>
+      <button id="tab-form" role="tab" aria-selected="false" aria-controls="view-form" onclick="showView('form')">＋ Nuevo envío</button>
+    </div>
+    <div class="user-badge" aria-label="Usuario activo">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Operador · sesión activa</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<main id="main-content" class="main-container">
+
+  <!-- ════ LISTADO ════ -->
+  <section id="view-list" class="view active" role="tabpanel" aria-labelledby="tab-list">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Envíos registrados<span class="dot" aria-hidden="true">.</span></h1>
+        <p class="page-subtitle">Solo envíos activos · ordenados por fecha de registro</p>
+      </div>
+      <button class="btn btn-primary" onclick="showView('form')" aria-label="Registrar nuevo envío">＋ Nuevo envío</button>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <span style="font-size:0.78rem; color:var(--text-sub);">Total:</span>
+          <span class="count-badge" id="count-chip" aria-live="polite" aria-label="Total de envíos">0</span>
+        </div>
+        <div class="search-wrap">
+          <span class="s-icon" aria-hidden="true">🔍</span>
+          <label for="search-input" class="visually-hidden">Buscar envíos</label>
+          <input type="search" class="form-control" id="search-input"
+            placeholder="Buscar por tracking ID, remitente o destinatario…"
+            aria-label="Buscar envíos" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div class="empty-state" id="empty-state" role="status" aria-live="polite">
+        <div class="e-icon" aria-hidden="true">📭</div>
+        <div class="e-title">No hay envíos registrados</div>
+        <p class="e-desc">Registrá el primer envío usando el botón de arriba.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" id="envios-table" style="display:none;" role="table" aria-label="Listado de envíos">
+          <thead>
+            <tr>
+              <th scope="col">Tracking ID</th>
+              <th scope="col">Remitente</th>
+              <th scope="col">Destinatario</th>
+              <th scope="col">Ciudad Origen</th>
+              <th scope="col">Ciudad Destino</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Entrega estimada</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" id="no-results" style="display:none;" role="status" aria-live="polite">
+        <div class="e-icon" aria-hidden="true">🔍</div>
+        <div class="e-title">Sin resultados</div>
+        <p class="e-desc">Ningún envío coincide con tu búsqueda.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ FORMULARIO DE ALTA ════ -->
+  <section id="view-form" class="view" role="tabpanel" aria-labelledby="tab-form">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Nuevo envío<span class="dot" aria-hidden="true">.</span></h1>
+        <p class="page-subtitle">
+          Campos marcados con <span style="color:var(--danger)" aria-label="obligatorio">*</span> son obligatorios
+        </p>
+      </div>
+      <button class="btn btn-ghost" onclick="showView('list')" aria-label="Volver al listado">← Volver al listado</button>
+    </div>
+
+    <div class="card">
+      <form id="alta-form" novalidate aria-label="Formulario de alta de envío" onsubmit="event.preventDefault(); submitForm();">
+
+        <!-- Tracking ID -->
+        <div class="section-title" aria-hidden="true">Tracking ID</div>
+        <div class="tracking-box mb-4" role="status" aria-live="polite">
+          <span class="t-label" aria-hidden="true">ID del envío</span>
+          <span class="t-value" id="tracking-display">(se asignará al registrar)</span>
+          <span class="t-chip">Auto</span>
+        </div>
+
+        <!-- Datos generales -->
+        <div class="section-title" aria-hidden="true">Datos generales</div>
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="remitente">Nombre del remitente <span class="req" aria-label="obligatorio">*</span></label>
+              <input type="text" class="form-control" id="remitente" name="remitente"
+                placeholder="Ej: Juan Pérez" aria-required="true" aria-invalid="false"
+                aria-describedby="err-remitente" autocomplete="name"/>
+              <div class="field-error" id="err-remitente" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="destinatario">Nombre del destinatario <span class="req" aria-label="obligatorio">*</span></label>
+              <input type="text" class="form-control" id="destinatario" name="destinatario"
+                placeholder="Ej: María García" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destinatario" autocomplete="off"/>
+              <div class="field-error" id="err-destinatario" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="fecha-entrega">Fecha estimada de entrega <span class="req" aria-label="obligatorio">*</span></label>
+              <input type="date" class="form-control" id="fecha-entrega" name="fecha-entrega"
+                aria-required="true" aria-invalid="false" aria-describedby="err-fecha-entrega"/>
+              <div class="field-error" id="err-fecha-entrega" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dirección de origen -->
+        <div class="section-title" aria-hidden="true">Dirección de origen</div>
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="origen-calle">Calle <span class="req">*</span></label>
+              <input type="text" class="form-control" id="origen-calle"
+                placeholder="Ej: Av. Corrientes" aria-required="true" aria-invalid="false"
+                aria-describedby="err-origen-calle"/>
+              <div class="field-error" id="err-origen-calle" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label class="form-label" for="origen-numero">Número <span class="req">*</span></label>
+              <input type="text" class="form-control" id="origen-numero"
+                placeholder="Ej: 1234" aria-required="true" aria-invalid="false"
+                aria-describedby="err-origen-numero" inputmode="numeric"/>
+              <div class="field-error" id="err-origen-numero" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label class="form-label" for="origen-cp">Código postal <span class="req">*</span></label>
+              <input type="text" class="form-control" id="origen-cp"
+                placeholder="Ej: 1043" aria-required="true" aria-invalid="false"
+                aria-describedby="err-origen-cp" inputmode="numeric"/>
+              <div class="field-error" id="err-origen-cp" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="origen-ciudad">Ciudad <span class="req">*</span></label>
+              <input type="text" class="form-control" id="origen-ciudad"
+                placeholder="Ej: Buenos Aires" aria-required="true" aria-invalid="false"
+                aria-describedby="err-origen-ciudad"/>
+              <div class="field-error" id="err-origen-ciudad" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="origen-provincia">Provincia <span class="req">*</span></label>
+              <input type="text" class="form-control" id="origen-provincia"
+                placeholder="Ej: CABA" aria-required="true" aria-invalid="false"
+                aria-describedby="err-origen-provincia"/>
+              <div class="field-error" id="err-origen-provincia" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dirección de destino -->
+        <div class="section-title" aria-hidden="true">Dirección de destino</div>
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="destino-calle">Calle <span class="req">*</span></label>
+              <input type="text" class="form-control" id="destino-calle"
+                placeholder="Ej: San Martín" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destino-calle"/>
+              <div class="field-error" id="err-destino-calle" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label class="form-label" for="destino-numero">Número <span class="req">*</span></label>
+              <input type="text" class="form-control" id="destino-numero"
+                placeholder="Ej: 567" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destino-numero" inputmode="numeric"/>
+              <div class="field-error" id="err-destino-numero" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-group">
+              <label class="form-label" for="destino-cp">Código postal <span class="req">*</span></label>
+              <input type="text" class="form-control" id="destino-cp"
+                placeholder="Ej: 2000" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destino-cp" inputmode="numeric"/>
+              <div class="field-error" id="err-destino-cp" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="destino-ciudad">Ciudad <span class="req">*</span></label>
+              <input type="text" class="form-control" id="destino-ciudad"
+                placeholder="Ej: Rosario" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destino-ciudad"/>
+              <div class="field-error" id="err-destino-ciudad" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="destino-provincia">Provincia <span class="req">*</span></label>
+              <input type="text" class="form-control" id="destino-provincia"
+                placeholder="Ej: Santa Fe" aria-required="true" aria-invalid="false"
+                aria-describedby="err-destino-provincia"/>
+              <div class="field-error" id="err-destino-provincia" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acciones -->
+        <div class="form-footer">
+          <button type="button" class="btn btn-ghost" onclick="resetForm()">Limpiar</button>
+          <button type="submit" class="btn btn-primary">Registrar envío</button>
+        </div>
+
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ MODAL DETALLE ══ -->
+<div id="modal-overlay" class="modal-overlay" style="display:none;" onclick="closeDetalle()" role="dialog" aria-modal="true" aria-labelledby="modal-tracking-id">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span class="modal-tracking-id" id="modal-tracking-id" aria-label="Tracking ID"></span>
+        <span id="modal-estado-badge"></span>
+      </div>
+      <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast" role="alert" aria-live="assertive" aria-atomic="true">
+  <span class="toast-icon" aria-hidden="true">✅</span>
+  <div>
+    <div class="toast-title">Envío registrado correctamente</div>
+    <div class="toast-sub" id="toast-sub"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
