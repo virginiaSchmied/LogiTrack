@@ -1,2 +1,13 @@
 /.vscode
 \.git
+
+.env
+.env.*
+*.env
+
+venv/
+.venv/
+env/
+
+
+
