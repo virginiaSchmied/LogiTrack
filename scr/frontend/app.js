@@ -28,6 +28,26 @@ const BADGE_LABEL = {
   'ELIMINADO':       'Eliminado',
 };
 
+// ─── Mapa de badges por prioridad ────────────────────────────────────────────
+const PRIORIDAD_BADGE_CLASS = {
+  'ALTA':  'badge-prioridad-alta',
+  'MEDIA': 'badge-prioridad-media',
+  'BAJA':  'badge-prioridad-baja',
+};
+
+const PRIORIDAD_BADGE_LABEL = {
+  'ALTA':  'Alta',
+  'MEDIA': 'Media',
+  'BAJA':  'Baja',
+};
+
+function prioridadBadge(prioridad) {
+  if (!prioridad) return `<span class="badge badge-prioridad-null">Sin clasificar</span>`;
+  const cls   = PRIORIDAD_BADGE_CLASS[prioridad] || 'badge-prioridad-null';
+  const label = PRIORIDAD_BADGE_LABEL[prioridad] || prioridad;
+  return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+}
+
 // ─── Navegación ───────────────────────────────────────────────────────────────
 function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -97,6 +117,7 @@ async function cargarEnvios(q = '') {
         <td data-label="Ciudad Origen" class="sub-text">${escHtml(e.ciudad_origen)}, ${escHtml(e.provincia_origen)}</td>
         <td data-label="Ciudad Destino" class="sub-text">${escHtml(e.ciudad_destino)}, ${escHtml(e.provincia_destino)}</td>
         <td data-label="Estado"><span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span></td>
+        <td data-label="Prioridad">${prioridadBadge(e.prioridad)}</td>
         <td data-label="Entrega estimada" class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</td>
       </tr>
     `).join('');
@@ -152,7 +173,7 @@ async function openDetalle(trackingId) {
           <dl class="detail-list">
             <div class="dl-row"><dt>Remitente</dt><dd>${escHtml(e.remitente)}</dd></div>
             <div class="dl-row"><dt>Destinatario</dt><dd>${escHtml(e.destinatario)}</dd></div>
-            <div class="dl-row"><dt>Prioridad</dt><dd>${e.prioridad ? escHtml(e.prioridad) : '<span class="sub-text">No asignada</span>'}</dd></div>
+            <div class="dl-row"><dt>Prioridad</dt><dd>${prioridadBadge(e.prioridad)}</dd></div>
             <div class="dl-row"><dt>Entrega estimada</dt><dd class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</dd></div>
             <div class="dl-row"><dt>Registrado</dt><dd class="mono-text">${escHtml(formatDatetime(e.created_at))}</dd></div>
             <div class="dl-row"><dt>Última actualización</dt><dd class="mono-text">${escHtml(formatDatetime(e.updated_at))}</dd></div>
@@ -316,9 +337,21 @@ async function submitForm() {
     return;
   }
 
+  const probVal = document.getElementById('prob-retraso').value.trim();
+  const probNum = probVal !== '' ? parseFloat(probVal) : null;
+  if (probNum !== null && (isNaN(probNum) || probNum < 0 || probNum > 1)) {
+    const errEl = document.getElementById('err-prob-retraso');
+    errEl.textContent = 'La probabilidad debe ser un número entre 0 y 1.';
+    errEl.classList.add('visible');
+    document.getElementById('prob-retraso').setAttribute('aria-invalid', 'true');
+    document.getElementById('prob-retraso').focus();
+    return;
+  }
+
   const payload = {
     remitente:              document.getElementById('remitente').value.trim(),
     destinatario:           document.getElementById('destinatario').value.trim(),
+    probabilidad_retraso:   probNum,
     fecha_entrega_estimada: document.getElementById('fecha-entrega').value,
     direccion_origen: {
       calle:         document.getElementById('origen-calle').value.trim(),
@@ -384,6 +417,10 @@ function resetForm() {
     if (el) el.value = '';
     clearFieldError(id);
   });
+  const probEl = document.getElementById('prob-retraso');
+  if (probEl) probEl.value = '';
+  const errProb = document.getElementById('err-prob-retraso');
+  if (errProb) errProb.classList.remove('visible');
   document.getElementById('tracking-display').textContent = '(se asignará al registrar)';
 }
 

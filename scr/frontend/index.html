@@ -74,6 +74,7 @@
               <th scope="col">Ciudad Origen</th>
               <th scope="col">Ciudad Destino</th>
               <th scope="col">Estado</th>
+              <th scope="col">Prioridad</th>
               <th scope="col">Entrega estimada</th>
             </tr>
           </thead>
@@ -139,6 +140,16 @@
               <input type="date" class="form-control" id="fecha-entrega" name="fecha-entrega"
                 aria-required="true" aria-invalid="false" aria-describedby="err-fecha-entrega"/>
               <div class="field-error" id="err-fecha-entrega" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="prob-retraso">Probabilidad de retraso</label>
+              <input type="number" class="form-control" id="prob-retraso" name="prob-retraso"
+                placeholder="Ej: 0.75" min="0" max="1" step="0.01"
+                aria-invalid="false" aria-describedby="err-prob-retraso help-prob-retraso"/>
+              <div class="form-text" id="help-prob-retraso">Valor entre 0 y 1. Si se ingresa, la prioridad se clasificará automáticamente.</div>
+              <div class="field-error" id="err-prob-retraso" role="alert" aria-live="polite"></div>
             </div>
           </div>
         </div>

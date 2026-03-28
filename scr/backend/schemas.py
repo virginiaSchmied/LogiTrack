@@ -56,6 +56,7 @@ class EnvioCreate(BaseModel):
 
     remitente:              str = Field(..., min_length=1, max_length=255)
     destinatario:           str = Field(..., min_length=1, max_length=255)
+    probabilidad_retraso:   Optional[float] = Field(None, ge=0.0, le=1.0)
     fecha_entrega_estimada: date
     direccion_origen:       DireccionCreate
     direccion_destino:      DireccionCreate

@@ -5,8 +5,9 @@ from sqlalchemy import func
 from datetime import date
 
 from database import get_db
-from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum
+from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum
 from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse
+from ml_predictor import predecir_prioridad
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
 
@@ -83,13 +84,24 @@ def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
 
     # 3. Generar tracking ID y crear envío
     tracking_id = _generar_tracking_id(db)
+
+    # LP-118: predecir prioridad con el modelo ML si se provee probabilidad_retraso
+    prioridad = None
+    if payload.probabilidad_retraso is not None:
+        dias = max(0, (payload.fecha_entrega_estimada - date.today()).days)
+        resultado = predecir_prioridad(payload.probabilidad_retraso, dias)
+        if resultado:
+            prioridad = NivelPrioridadEnum(resultado)
+
     envio = Envio(
         uuid=uuid.uuid4(),
         tracking_id=tracking_id,
         remitente=payload.remitente,
         destinatario=payload.destinatario,
+        probabilidad_retraso=payload.probabilidad_retraso,
         fecha_entrega_estimada=payload.fecha_entrega_estimada,
         estado=EstadoEnvioEnum.REGISTRADO,
+        prioridad=prioridad,
         direccion_origen_id=origen.id,
         direccion_destino_id=destino.id,
     )
