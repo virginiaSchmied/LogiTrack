@@ -98,6 +98,20 @@ Ubicados en `tests/e2e/`. Simulan flujos reales de usuario sobre el frontend:
 
 ---
 
+## Módulo ML
+
+El módulo de Machine Learning clasifica automáticamente la prioridad de cada envío (ALTA / MEDIA / BAJA) a partir de la probabilidad de retraso y los días para la entrega estimada, usando un modelo Decision Tree entrenado con scikit-learn.
+
+| Módulo | Responsabilidad |
+|---|---|
+| `scr/ml/train.py` | Entrenamiento, evaluación y exportación del modelo |
+| `scr/ml/modelo_prioridad.joblib` | Modelo serializado (versionado) |
+| `scr/backend/ml_predictor.py` | Servicio de predicción (singleton) |
+
+La predicción se ejecuta automáticamente al crear un envío si se provee `probabilidad_retraso`. Ver [docs/ml.md](ml.md) para el detalle completo.
+
+---
+
 ## Decisiones de diseño destacadas
 
 - **Separación clara de capas**: frontend, backend y base de datos son independientes y pueden desplegarse por separado.
