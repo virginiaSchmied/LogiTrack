@@ -93,7 +93,7 @@ Decision Tree y Random Forest obtuvieron métricas perfectas. Se eligió Decisio
 
 ## 4. Entrenamiento y métricas
 
-Implementado en `ml/train.py`. El script evalúa los 3 algoritmos sobre el 20% de test y luego reentrena el ganador sobre el **100% del dataset** antes de exportar el modelo final.
+Implementado en `ml/train.py`. El script evalúa los 3 algoritmos sobre el 20% de test y exporta directamente el modelo ganador **sin reentrenar sobre el dataset completo**. De esta forma, las métricas reportadas corresponden exactamente al modelo guardado en producción.
 
 **Métricas del modelo final (evaluadas sobre el 20% de test):**
 
@@ -117,9 +117,30 @@ python3 ml/train.py                    # semilla: RANDOM_STATE=42
 
 ---
 
-## 5. Exportación del modelo
+## 5. Exportación y validación del modelo
 
-El modelo fue serializado con `joblib.dump` al finalizar `train.py` y verificado cargándolo y realizando una predicción de prueba (prob=0.80, dias=2 → ALTA).
+El modelo fue serializado con `joblib.dump` al finalizar `train.py`. Al exportar, el script ejecuta automáticamente una tabla de validación con 9 casos fijos que cubren los 9 cuadrantes de la matriz de prioridad. Cada caso compara el resultado esperado con el predicho e indica si hay discrepancias:
+
+```
+============================================================
+VALIDACIÓN DEL MODELO (matriz de prioridad completa)
+============================================================
+  prob   dias    esperado    predicho    ok
+  ----   ----   ----------  ----------  ----
+  0.85      1        ALTA        ALTA     ✓
+  0.85      5        ALTA        ALTA     ✓
+  0.85     10       MEDIA       MEDIA     ✓
+  0.55      1        ALTA        ALTA     ✓
+  0.55      5       MEDIA       MEDIA     ✓
+  0.55     10       MEDIA       MEDIA     ✓
+  0.20      1       MEDIA       MEDIA     ✓
+  0.20      5        BAJA        BAJA     ✓
+  0.20     10        BAJA        BAJA     ✓
+============================================================
+Todos los casos correctos. El modelo reproduce la matriz de prioridad.
+```
+
+Los valores de entrada son fijos y no dependen de fechas, por lo que la validación es reproducible en cualquier momento.
 
 **Entregable:** `ml/modelo_prioridad.joblib` — versionado en el repositorio.
 

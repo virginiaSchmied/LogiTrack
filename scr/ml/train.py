@@ -220,11 +220,41 @@ def exportar(modelo, nombre: str):
     joblib.dump(modelo, MODEL_PATH)
     print(f"\nModelo exportado: {MODEL_PATH}")
 
-    # Verificación rápida
+    # ── Tabla de validación ───────────────────────────────────────────────────
+    # Cubre los 9 cuadrantes de la matriz de prioridad.
+    # Valores fijos: no dependen de fechas ni del dataset.
+    # Un resultado inesperado indica que el modelo no aprendió la regla correctamente.
+    CASOS = [
+        #  prob    dias   esperado
+        (0.85,    1,    "ALTA"),   # prob>0.70 , ≤2 días  → ALTA
+        (0.85,    5,    "ALTA"),   # prob>0.70 , 3-7 días → ALTA
+        (0.85,   10,   "MEDIA"),   # prob>0.70 , >7 días  → MEDIA
+        (0.55,    1,    "ALTA"),   # 0.40-0.70 , ≤2 días  → ALTA
+        (0.55,    5,   "MEDIA"),   # 0.40-0.70 , 3-7 días → MEDIA
+        (0.55,   10,   "MEDIA"),   # 0.40-0.70 , >7 días  → MEDIA
+        (0.20,    1,   "MEDIA"),   # prob<0.40 , ≤2 días  → MEDIA
+        (0.20,    5,    "BAJA"),   # prob<0.40 , 3-7 días → BAJA
+        (0.20,   10,    "BAJA"),   # prob<0.40 , >7 días  → BAJA
+    ]
+
     modelo_cargado = joblib.load(MODEL_PATH)
-    ejemplo = np.array([[0.80, 2]])   # prob alta, 2 días → esperado: ALTA
-    pred = modelo_cargado.predict(ejemplo)[0]
-    print(f"Verificación (prob=0.80, dias=2) → prioridad predicha: {pred}")
+    print("\n" + "=" * 60)
+    print("VALIDACIÓN DEL MODELO (matriz de prioridad completa)")
+    print("=" * 60)
+    print(f"  {'prob':>6}  {'dias':>5}  {'esperado':>10}  {'predicho':>10}  {'ok':>4}")
+    print(f"  {'-'*6}  {'-'*5}  {'-'*10}  {'-'*10}  {'-'*4}")
+    errores = 0
+    for prob, dias, esperado in CASOS:
+        predicho = modelo_cargado.predict(np.array([[prob, dias]]))[0]
+        ok = "✓" if predicho == esperado else "✗ ERROR"
+        if predicho != esperado:
+            errores += 1
+        print(f"  {prob:>6.2f}  {dias:>5}  {esperado:>10}  {predicho:>10}  {ok}")
+    print("=" * 60)
+    if errores == 0:
+        print("Todos los casos correctos. El modelo reproduce la matriz de prioridad.")
+    else:
+        print(f"ADVERTENCIA: {errores} caso(s) no coinciden con la regla de negocio.")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
