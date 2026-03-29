@@ -193,7 +193,7 @@ def comparar_modelos(X_train, X_test, y_train, y_test):
     return resultados
 
 
-# ── Selección y entrenamiento final (LP-115) ──────────────────────────────────
+# ── Selección del modelo final (LP-115) ───────────────────────────────────────
 
 def seleccionar_y_entrenar(resultados, X, y):
     mejor_nombre = max(resultados, key=lambda n: resultados[n]["f1_macro"])
@@ -207,14 +207,11 @@ def seleccionar_y_entrenar(resultados, X, y):
         print(f"  {nombre:20s}  accuracy={info['accuracy']:.4f}  f1_macro={info['f1_macro']:.4f}{marca}")
 
     print(f"\nMotivo: mayor F1-score macro promedio entre las 3 clases.")
+    print(f"El modelo guardado es el mismo evaluado sobre el 20% de test (métricas honestas).")
 
-    # Reentrenar sobre el dataset completo
-    clase = type(mejor_info["modelo"])
-    kwargs = {"random_state": RANDOM_STATE} if hasattr(clase(), "random_state") else {}
-    modelo_final = clase(**{**mejor_info["modelo"].get_params(), **kwargs})
-    modelo_final.fit(X, y)
-
-    return mejor_nombre, modelo_final
+    # Se usa el modelo ya entrenado en el 80% — las métricas reportadas corresponden
+    # exactamente a este modelo, por lo que no se reentrena sobre el dataset completo.
+    return mejor_nombre, mejor_info["modelo"]
 
 
 # ── Exportar modelo (LP-116) ──────────────────────────────────────────────────
@@ -223,11 +220,41 @@ def exportar(modelo, nombre: str):
     joblib.dump(modelo, MODEL_PATH)
     print(f"\nModelo exportado: {MODEL_PATH}")
 
-    # Verificación rápida
+    # ── Tabla de validación ───────────────────────────────────────────────────
+    # Cubre los 9 cuadrantes de la matriz de prioridad.
+    # Valores fijos: no dependen de fechas ni del dataset.
+    # Un resultado inesperado indica que el modelo no aprendió la regla correctamente.
+    CASOS = [
+        #  prob    dias   esperado
+        (0.85,    1,    "ALTA"),   # prob>0.70 , ≤2 días  → ALTA
+        (0.85,    5,    "ALTA"),   # prob>0.70 , 3-7 días → ALTA
+        (0.85,   10,   "MEDIA"),   # prob>0.70 , >7 días  → MEDIA
+        (0.55,    1,    "ALTA"),   # 0.40-0.70 , ≤2 días  → ALTA
+        (0.55,    5,   "MEDIA"),   # 0.40-0.70 , 3-7 días → MEDIA
+        (0.55,   10,   "MEDIA"),   # 0.40-0.70 , >7 días  → MEDIA
+        (0.20,    1,   "MEDIA"),   # prob<0.40 , ≤2 días  → MEDIA
+        (0.20,    5,    "BAJA"),   # prob<0.40 , 3-7 días → BAJA
+        (0.20,   10,    "BAJA"),   # prob<0.40 , >7 días  → BAJA
+    ]
+
     modelo_cargado = joblib.load(MODEL_PATH)
-    ejemplo = np.array([[0.80, 2]])   # prob alta, 2 días → esperado: ALTA
-    pred = modelo_cargado.predict(ejemplo)[0]
-    print(f"Verificación (prob=0.80, dias=2) → prioridad predicha: {pred}")
+    print("\n" + "=" * 60)
+    print("VALIDACIÓN DEL MODELO (matriz de prioridad completa)")
+    print("=" * 60)
+    print(f"  {'prob':>6}  {'dias':>5}  {'esperado':>10}  {'predicho':>10}  {'ok':>4}")
+    print(f"  {'-'*6}  {'-'*5}  {'-'*10}  {'-'*10}  {'-'*4}")
+    errores = 0
+    for prob, dias, esperado in CASOS:
+        predicho = modelo_cargado.predict(np.array([[prob, dias]]))[0]
+        ok = "✓" if predicho == esperado else "✗ ERROR"
+        if predicho != esperado:
+            errores += 1
+        print(f"  {prob:>6.2f}  {dias:>5}  {esperado:>10}  {predicho:>10}  {ok}")
+    print("=" * 60)
+    if errores == 0:
+        print("Todos los casos correctos. El modelo reproduce la matriz de prioridad.")
+    else:
+        print(f"ADVERTENCIA: {errores} caso(s) no coinciden con la regla de negocio.")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -248,8 +275,8 @@ def main():
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
 
-    resultados   = comparar_modelos(X_train, X_test, y_train, y_test)
-    nombre, modelo = seleccionar_y_entrenar(resultados, X, y)
+    resultados     = comparar_modelos(X_train, X_test, y_train, y_test)
+    nombre, modelo = seleccionar_y_entrenar(resultados, X_train, y_train)
     exportar(modelo, nombre)
 
 

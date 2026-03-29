@@ -12,6 +12,7 @@ from database import Base
 
 class EstadoEnvioEnum(str, enum.Enum):
     REGISTRADO     = "REGISTRADO"
+    EN_DEPOSITO    = "EN_DEPOSITO"
     ELIMINADO      = "ELIMINADO"
     EN_TRANSITO    = "EN_TRANSITO"
     EN_SUCURSAL    = "EN_SUCURSAL"
