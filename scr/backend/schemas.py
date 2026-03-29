@@ -123,8 +123,9 @@ class EnvioOut(BaseModel):
 
 
 class EnvioOutDetalle(EnvioOut):
-    """EnvioOut extendido con la última ubicación registrada en eventos"""
+    """EnvioOut extendido con la última ubicación registrada en eventos y el estado previo al de excepción."""
     ultima_ubicacion: Optional[DireccionOut] = None
+    estado_revertir:  Optional[str]          = None  # último estado del flujo normal (para revertir excepción)
 
 
 # ── Respuesta paginada ────────────────────────────────────────────────────────
@@ -166,11 +167,3 @@ class EnvioCambioEstado(BaseModel):
     nuevo_estado:              EstadoEnvioEnum
     nueva_ubicacion:           Optional[DireccionCreate] = None
     reusar_ubicacion_anterior: bool = False
-
-    @model_validator(mode="after")
-    def ubicacion_requerida(self) -> "EnvioCambioEstado":
-        if self.nueva_ubicacion is None and not self.reusar_ubicacion_anterior:
-            raise ValueError("Debe proveer una ubicación nueva o indicar que se reutiliza la anterior")
-        if self.nueva_ubicacion is not None and self.reusar_ubicacion_anterior:
-            raise ValueError("No puede proveer ubicación nueva y reusar la anterior a la vez")
-        return self

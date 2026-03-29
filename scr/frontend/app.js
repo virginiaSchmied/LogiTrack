@@ -6,6 +6,7 @@ const API_BASE = "http://18.191.173.105:8000";
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {
   'REGISTRADO':      'badge-registrado',
+  'EN_DEPOSITO':     'badge-deposito',
   'EN_TRANSITO':     'badge-transito',
   'EN_SUCURSAL':     'badge-sucursal',
   'EN_DISTRIBUCION': 'badge-distribucion',
@@ -18,6 +19,7 @@ const BADGE_CLASS = {
 
 const BADGE_LABEL = {
   'REGISTRADO':      'Registrado',
+  'EN_DEPOSITO':     'En depósito',
   'EN_TRANSITO':     'En tránsito',
   'EN_SUCURSAL':     'En sucursal',
   'EN_DISTRIBUCION': 'En distribución',
@@ -180,13 +182,23 @@ function formatDatetime(iso) {
   return d.toLocaleDateString('es-AR') + ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ─── Flujo normal de estados ──────────────────────────────────────────────────
-const SIGUIENTE_ESTADO = {
-  'REGISTRADO':      'EN_TRANSITO',
-  'EN_TRANSITO':     'EN_SUCURSAL',
-  'EN_SUCURSAL':     'EN_DISTRIBUCION',
-  'EN_DISTRIBUCION': 'ENTREGADO',
+// ─── Grafo de transiciones de estado ─────────────────────────────────────────
+const TRANSICIONES_VALIDAS = {
+  'REGISTRADO':      ['EN_DEPOSITO', 'CANCELADO'],
+  'EN_DEPOSITO':     ['EN_TRANSITO', 'RETRASADO', 'BLOQUEADO', 'CANCELADO'],
+  'EN_TRANSITO':     ['EN_SUCURSAL', 'RETRASADO'],
+  'EN_SUCURSAL':     ['EN_DISTRIBUCION', 'RETRASADO', 'BLOQUEADO', 'CANCELADO'],
+  'EN_DISTRIBUCION': ['ENTREGADO', 'RETRASADO'],
+  'ENTREGADO':       [],
+  'RETRASADO':       ['EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION'],
+  'BLOQUEADO':       ['EN_DEPOSITO', 'EN_SUCURSAL'],
+  'CANCELADO':       [],
+  'ELIMINADO':       [],
 };
+
+const ESTADOS_EXCEPCION              = ['RETRASADO', 'CANCELADO', 'BLOQUEADO'];
+const FLUJO_NORMAL                   = ['REGISTRADO', 'EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION', 'ENTREGADO'];
+const ESTADOS_UBICACION_OBLIGATORIA  = ['EN_DEPOSITO', 'EN_SUCURSAL', 'ENTREGADO'];
 
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
 let _envioDetalle = null;
@@ -217,17 +229,22 @@ async function openDetalle(trackingId) {
     const btnEliminar      = document.getElementById('btn-eliminar');
     const btnEditar        = document.getElementById('btn-editar');
     const btnCambiarEstado = document.getElementById('btn-cambiar-estado');
-    if (e.estado !== 'ELIMINADO') {
-      btnEliminar.style.display = '';
-      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+
+    // Edit (contacto/operativo): show for non-ELIMINADO, non-CANCELADO
+    if (e.estado !== 'ELIMINADO' && e.estado !== 'CANCELADO') {
       btnEditar.style.display = '';
       btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
     }
-    const siguienteEstado = SIGUIENTE_ESTADO[e.estado];
-    if (siguienteEstado) {
-      btnCambiarEstado.textContent   = `→ ${BADGE_LABEL[siguienteEstado] || siguienteEstado}`;
+    // Delete: only for CANCELADO
+    if (e.estado === 'CANCELADO') {
+      btnEliminar.style.display = '';
+      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+    }
+    // Editar estado: only when transitions exist
+    const transiciones = TRANSICIONES_VALIDAS[e.estado] || [];
+    if (transiciones.length > 0) {
       btnCambiarEstado.style.display = '';
-      btnCambiarEstado.onclick       = () => { closeDetalle(); openEstado(e.tracking_id, e.estado, e.ultima_ubicacion || null); };
+      btnCambiarEstado.onclick = () => { closeDetalle(); openEstado(e.tracking_id, e.estado, e.ultima_ubicacion || null, e.estado_revertir || null); };
     }
 
     body.innerHTML = `
@@ -327,30 +344,139 @@ async function confirmarEliminacion() {
 let _trackingIdEnCambioEstado = null;
 let _estadoActualEnCambio     = null;
 let _ultimaUbicacion          = null;
+let _estadoSeleccionado       = null;
 
-function openEstado(trackingId, estadoActual, ultimaUbicacion = null) {
+function openEstado(trackingId, estadoActual, ultimaUbicacion = null, estadoRevertir = null) {
   _trackingIdEnCambioEstado = trackingId;
   _estadoActualEnCambio     = estadoActual;
   _ultimaUbicacion          = ultimaUbicacion;
+  _estadoSeleccionado       = null;
 
-  const siguiente = SIGUIENTE_ESTADO[estadoActual];
   document.getElementById('estado-modal-tid').textContent = trackingId;
-  document.getElementById('estado-actual-display').innerHTML =
-    `<span class="badge ${BADGE_CLASS[estadoActual] || 'badge-registrado'}">${escHtml(BADGE_LABEL[estadoActual] || estadoActual)}</span>`;
-  document.getElementById('estado-nuevo-display').innerHTML =
-    `<span class="badge ${BADGE_CLASS[siguiente] || 'badge-registrado'}">${escHtml(BADGE_LABEL[siguiente] || siguiente)}</span>`;
 
-  // Mostrar checkbox solo si hay una ubicación anterior registrada
-  document.getElementById('reusar-wrap').style.display = ultimaUbicacion ? '' : 'none';
+  // RETRASADO y BLOQUEADO solo pueden revertir al estado normal previo (no a cualquier válido del grafo)
+  const ESTADOS_REVERSIBLES = ['RETRASADO', 'BLOQUEADO'];
+  const esReversible = ESTADOS_REVERSIBLES.includes(estadoActual);
+  const badgeActual  = `<span class="badge ${BADGE_CLASS[estadoActual] || ''}">${escHtml(BADGE_LABEL[estadoActual] || estadoActual)}</span>`;
 
-  document.getElementById('reusar-ubicacion').checked = false;
-  document.getElementById('ubicacion-form-fields').style.display = '';
+  // Si es reversible y tenemos el estado previo, mostrar solo esa opción; si no, usar el grafo completo
+  const transiciones = esReversible && estadoRevertir
+    ? [estadoRevertir]
+    : TRANSICIONES_VALIDAS[estadoActual] || [];
+
+  let opcionesHtml = `
+    <div class="estado-actual-row">
+      <span class="form-label">Estado actual</span>
+      ${badgeActual}
+    </div>
+    <div class="section-title">Seleccionar acción</div>
+  `;
+
+  transiciones.forEach(target => {
+    const badgeTarget  = `<span class="badge ${BADGE_CLASS[target] || ''}">${escHtml(BADGE_LABEL[target] || target)}</span>`;
+    const esExcTarget  = ESTADOS_EXCEPCION.includes(target);
+    const esCancelar   = target === 'CANCELADO';
+    const opcionLabel  = esReversible ? 'Revertir al flujo normal'
+                       : esCancelar   ? 'Cancelar envío'
+                       : esExcTarget  ? 'Asignar excepción'
+                       :                'Avanzar en el flujo';
+    const cardClass    = esCancelar ? 'estado-opcion-card cancelar-card' : 'estado-opcion-card';
+
+    opcionesHtml += `
+      <div class="${cardClass}" id="opcion-${target}" onclick="selectOpcion('${target}')">
+        <div class="opcion-label">${escHtml(opcionLabel)}</div>
+        <div class="estado-transicion-mini">
+          ${badgeActual}
+          <span class="estado-flecha">→</span>
+          ${badgeTarget}
+        </div>
+      </div>`;
+  });
+
+  // Auto-select si hay una sola opción (incluyendo el caso de revertir)
+  if (transiciones.length === 1) {
+    _estadoSeleccionado = transiciones[0];
+  }
+
+  document.getElementById('estado-opciones-wrap').innerHTML = opcionesHtml;
+
+  // Auto-add selected class if auto-selected
+  if (_estadoSeleccionado) {
+    document.getElementById(`opcion-${_estadoSeleccionado}`)?.classList.add('selected');
+  }
+
+  // Mostrar la última ubicación registrada (solo lectura)
+  const displayUbicacion = document.getElementById('ultima-ubicacion-display');
+  if (ultimaUbicacion) {
+    displayUbicacion.style.display = '';
+    displayUbicacion.innerHTML = `
+      <div class="ubicacion-actual-box">
+        <span class="ubicacion-actual-linea">${escHtml(ultimaUbicacion.calle)} ${escHtml(ultimaUbicacion.numero)}</span>
+        <span class="ubicacion-actual-linea">${escHtml(ultimaUbicacion.ciudad)}, ${escHtml(ultimaUbicacion.provincia)} · CP ${escHtml(ultimaUbicacion.codigo_postal)}</span>
+      </div>`;
+  } else {
+    displayUbicacion.style.display = '';
+    displayUbicacion.innerHTML = `
+      <div class="ubicacion-actual-box ubicacion-actual-vacia">
+        <span class="ubicacion-actual-linea">Aún no se han registrado ubicaciones</span>
+      </div>`;
+  }
+
   _clearEstadoErrors();
   ['estado-calle', 'estado-numero', 'estado-cp', 'estado-ciudad', 'estado-provincia']
     .forEach(id => { document.getElementById(id).value = ''; });
 
+  _aplicarUbicacionUI(_estadoSeleccionado, ultimaUbicacion, esReversible);
+
   document.getElementById('estado-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
+}
+
+function selectOpcion(opcion) {
+  _estadoSeleccionado = opcion;
+  document.querySelectorAll('.estado-opcion-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`opcion-${opcion}`)?.classList.add('selected');
+  // Es reversión si el estado actual es RETRASADO o BLOQUEADO (el target siempre es flujo normal)
+  const esReversion = ['RETRASADO', 'BLOQUEADO'].includes(_estadoActualEnCambio);
+  _aplicarUbicacionUI(opcion, _ultimaUbicacion, esReversion);
+}
+
+function _aplicarUbicacionUI(targetEstado, ultimaUbicacion, esReversion = false) {
+  const titulo    = document.getElementById('ubicacion-section-title');
+  const display   = document.getElementById('ultima-ubicacion-display');
+  const reusarWrap = document.getElementById('reusar-wrap');
+  const formFields = document.getElementById('ubicacion-form-fields');
+
+  // Limpiar error general al cambiar de opción
+  document.getElementById('err-ubicacion-general').classList.remove('visible');
+
+  // CANCELADO: no requiere ubicación — ocultar toda la sección
+  if (targetEstado === 'CANCELADO') {
+    titulo.style.display    = 'none';
+    display.style.display   = 'none';
+    reusarWrap.style.display = 'none';
+    formFields.style.display = 'none';
+    document.getElementById('reusar-ubicacion').checked = false;
+    return;
+  }
+
+  // Resto: mostrar sección
+  titulo.style.display  = '';
+  display.style.display = '';
+
+  // EN_SUCURSAL / ENTREGADO: nueva dirección obligatoria
+  if (targetEstado != null && ESTADOS_UBICACION_OBLIGATORIA.includes(targetEstado)) {
+    reusarWrap.style.display = 'none';
+    document.getElementById('reusar-ubicacion').checked = false;
+    formFields.style.display = '';
+    return;
+  }
+
+  // Resto (incluyendo reversiones): pre-marcar si hay ubicación previa
+  reusarWrap.style.display = '';
+  const preMarcar = esReversion || ultimaUbicacion != null;
+  document.getElementById('reusar-ubicacion').checked = preMarcar;
+  formFields.style.display = preMarcar ? 'none' : '';
 }
 
 function closeEstado() {
@@ -359,17 +485,17 @@ function closeEstado() {
   _trackingIdEnCambioEstado = null;
   _estadoActualEnCambio     = null;
   _ultimaUbicacion          = null;
+  _estadoSeleccionado       = null;
 }
 
 function toggleReusar(checked) {
-  if (checked && _ultimaUbicacion) {
-    document.getElementById('estado-calle').value    = _ultimaUbicacion.calle    || '';
-    document.getElementById('estado-numero').value   = _ultimaUbicacion.numero   || '';
-    document.getElementById('estado-cp').value       = _ultimaUbicacion.codigo_postal || '';
-    document.getElementById('estado-ciudad').value   = _ultimaUbicacion.ciudad   || '';
-    document.getElementById('estado-provincia').value= _ultimaUbicacion.provincia|| '';
+  const formFields = document.getElementById('ubicacion-form-fields');
+  if (checked) {
+    formFields.style.display = 'none';
     _clearEstadoErrors();
-  } else if (!checked) {
+    document.getElementById('err-ubicacion-general').classList.remove('visible');
+  } else {
+    formFields.style.display = '';
     ['estado-calle', 'estado-numero', 'estado-cp', 'estado-ciudad', 'estado-provincia']
       .forEach(id => { document.getElementById(id).value = ''; });
     _clearEstadoErrors();
@@ -386,50 +512,87 @@ function _clearEstadoErrors() {
 }
 
 async function submitCambioEstado() {
-  const checks = [
-    ['estado-calle',    validateCalle,       'calle de ubicación'],
-    ['estado-numero',   validateNumero,      'número de ubicación'],
-    ['estado-cp',       validateCP,          'código postal de ubicación'],
-    ['estado-ciudad',   validateTextoSimple, 'ciudad de ubicación'],
-    ['estado-provincia',validateTextoSimple, 'provincia de ubicación'],
-  ];
-  let valid = true;
-  let firstInvalid = null;
-  for (const [id, fn, label] of checks) {
-    const input = document.getElementById(id);
-    const error = document.getElementById('err-' + id);
-    const msg = fn(input.value, label);
-    if (msg) {
-      input.setAttribute('aria-invalid', 'true');
-      error.textContent = msg;
-      error.classList.add('visible');
-      if (valid) firstInvalid = id;
-      valid = false;
-    } else {
-      input.setAttribute('aria-invalid', 'false');
-      error.classList.remove('visible');
-    }
+  if (!_estadoSeleccionado) {
+    alert('Seleccioná una acción antes de confirmar.');
+    return;
   }
-  if (!valid) { document.getElementById(firstInvalid).focus(); return; }
 
-  const payload = {
-    nuevo_estado:              SIGUIENTE_ESTADO[_estadoActualEnCambio],
-    reusar_ubicacion_anterior: false,
-    nueva_ubicacion: {
-      calle:         document.getElementById('estado-calle').value.trim(),
-      numero:        document.getElementById('estado-numero').value.trim(),
-      ciudad:        document.getElementById('estado-ciudad').value.trim(),
-      provincia:     document.getElementById('estado-provincia').value.trim(),
-      codigo_postal: document.getElementById('estado-cp').value.trim(),
-    },
-  };
+  // Confirmation for CANCELADO (irreversible)
+  if (_estadoSeleccionado === 'CANCELADO') {
+    openConfirmCancelar();
+    return;
+  }
+
+  await _ejecutarCambioEstado();
+}
+
+async function _ejecutarCambioEstado() {
+  const reusar = document.getElementById('reusar-ubicacion').checked;
+  let ubicacionPayload;
+
+  // CANCELADO no requiere ubicación
+  if (_estadoSeleccionado === 'CANCELADO') {
+    ubicacionPayload = { reusar_ubicacion_anterior: false };
+  } else if (reusar) {
+    ubicacionPayload = { reusar_ubicacion_anterior: true };
+  } else {
+    const checks = [
+      ['estado-calle',    validateCalle,       'calle de ubicación'],
+      ['estado-numero',   validateNumero,      'número de ubicación'],
+      ['estado-cp',       validateCP,          'código postal de ubicación'],
+      ['estado-ciudad',   validateTextoSimple, 'ciudad de ubicación'],
+      ['estado-provincia',validateTextoSimple, 'provincia de ubicación'],
+    ];
+    let valid = true;
+    let firstInvalid = null;
+    for (const [id, fn, label] of checks) {
+      const input = document.getElementById(id);
+      const error = document.getElementById('err-' + id);
+      const msg = fn(input.value, label);
+      if (msg) {
+        input.setAttribute('aria-invalid', 'true');
+        error.textContent = msg;
+        error.classList.add('visible');
+        if (valid) firstInvalid = id;
+        valid = false;
+      } else {
+        input.setAttribute('aria-invalid', 'false');
+        error.classList.remove('visible');
+      }
+    }
+    if (!valid) {
+      const reusarWrap = document.getElementById('reusar-wrap');
+      const errGeneral = document.getElementById('err-ubicacion-general');
+      if (reusarWrap.style.display !== 'none') {
+        errGeneral.textContent = "Completá la nueva ubicación o marcá 'Mantener la dirección actual'.";
+        errGeneral.classList.add('visible');
+      }
+      document.getElementById(firstInvalid).focus();
+      return;
+    }
+    document.getElementById('err-ubicacion-general').classList.remove('visible');
+
+    ubicacionPayload = {
+      reusar_ubicacion_anterior: false,
+      nueva_ubicacion: {
+        calle:         document.getElementById('estado-calle').value.trim(),
+        numero:        document.getElementById('estado-numero').value.trim(),
+        ciudad:        document.getElementById('estado-ciudad').value.trim(),
+        provincia:     document.getElementById('estado-provincia').value.trim(),
+        codigo_postal: document.getElementById('estado-cp').value.trim(),
+      },
+    };
+  }
+
+  const endpoint = `${API_BASE}/envios/${encodeURIComponent(_trackingIdEnCambioEstado)}/estado`;
+  const payload  = { nuevo_estado: _estadoSeleccionado, ...ubicacionPayload };
 
   const btn = document.getElementById('btn-confirmar-estado');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
 
   try {
-    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnCambioEstado)}/estado`, {
+    const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -439,10 +602,11 @@ async function submitCambioEstado() {
       alert(typeof err.detail === 'string' ? err.detail : 'Error al cambiar el estado.');
       return;
     }
-    const tid         = _trackingIdEnCambioEstado;
-    const nuevoEstado = SIGUIENTE_ESTADO[_estadoActualEnCambio];
+    const data       = await res.json();
+    const tid        = _trackingIdEnCambioEstado;
+    const nuevoLabel = BADGE_LABEL[data.estado] || data.estado;
     closeEstado();
-    showToast(tid, `Estado actualizado: ${BADGE_LABEL[nuevoEstado] || nuevoEstado}`);
+    showToast('Estado actualizado', `${tid} → ${nuevoLabel}`, false);
     cargarEnvios(currentQuery, currentPage);
   } catch (err) {
     console.error('Error al cambiar estado:', err);
@@ -451,6 +615,20 @@ async function submitCambioEstado() {
     btn.disabled = false;
     btn.textContent = 'Confirmar cambio';
   }
+}
+
+function openConfirmCancelar() {
+  document.getElementById('confirm-cancelar-tid').textContent = _trackingIdEnCambioEstado;
+  document.getElementById('confirm-cancelar-overlay').style.display = 'flex';
+}
+
+function closeConfirmCancelar() {
+  document.getElementById('confirm-cancelar-overlay').style.display = 'none';
+}
+
+async function confirmarCancelar() {
+  closeConfirmCancelar();
+  await _ejecutarCambioEstado();
 }
 
 // ─── Edición de envío ─────────────────────────────────────────────────────────
@@ -908,6 +1086,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      closeConfirmCancelar();
       closeEstado();
       closeEdit();
       closeConfirmDelete();

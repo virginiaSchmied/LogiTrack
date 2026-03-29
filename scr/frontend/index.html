@@ -281,7 +281,7 @@
         <span id="modal-estado-badge"></span>
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;">
-        <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Avanzar estado del envío"></button>
+        <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Editar estado del envío">Editar estado</button>
         <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
         <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
         <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
@@ -318,26 +318,19 @@
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
         <span class="modal-tracking-id" id="estado-modal-tid"></span>
-        <span style="font-size:.78rem;color:var(--text-sub);font-weight:600;">Cambiar estado</span>
+        <span style="font-size:.78rem;color:var(--text-sub);font-weight:600;">Editar estado</span>
       </div>
       <button class="modal-close" onclick="closeEstado()" aria-label="Cerrar cambio de estado">✕</button>
     </div>
 
     <div class="modal-body">
-      <div class="estado-transicion">
-        <div class="estado-transicion-item">
-          <div class="form-label" style="margin-bottom:.5rem;">Estado actual</div>
-          <div id="estado-actual-display"></div>
-        </div>
-        <div class="estado-flecha" aria-hidden="true">→</div>
-        <div class="estado-transicion-item">
-          <div class="form-label" style="margin-bottom:.5rem;">Nuevo estado</div>
-          <div id="estado-nuevo-display"></div>
-        </div>
-      </div>
+      <!-- opciones dinámicas (flujo normal / excepción / revertir) — llenado por JS -->
+      <div id="estado-opciones-wrap"></div>
 
       <form id="estado-form" novalidate onsubmit="event.preventDefault(); submitCambioEstado();">
-        <div class="section-title" style="margin-top:1.5rem;">Ubicación actual</div>
+        <div class="section-title" id="ubicacion-section-title" style="margin-top:1.5rem;">Ubicación actual</div>
+
+        <div id="ultima-ubicacion-display" style="display:none;" class="mb-3"></div>
 
         <div id="reusar-wrap" style="display:none;" class="mb-3">
           <label class="reusar-label">
@@ -345,6 +338,8 @@
             Mantener la dirección actual
           </label>
         </div>
+
+        <div class="field-error" id="err-ubicacion-general" role="alert" aria-live="polite" style="margin-bottom:0.75rem;"></div>
 
         <div id="ubicacion-form-fields">
           <div class="row g-3">
@@ -495,6 +490,25 @@
       </form>
     </div>
 
+  </div>
+</div>
+
+<!-- ══ CONFIRMACIÓN CANCELAR ══ -->
+<div id="confirm-cancelar-overlay" class="confirm-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="confirm-cancelar-title">
+  <div class="confirm-box">
+    <div class="confirm-header">
+      <span class="confirm-title" id="confirm-cancelar-title">Confirmar cancelación</span>
+    </div>
+    <div class="confirm-body">
+      <p class="confirm-desc">Esta acción es <strong>irreversible</strong>. El envío pasará a estado <strong>Cancelado</strong> y no podrá volver al flujo normal. Solo podrá ser eliminado.</p>
+      <dl class="detail-list">
+        <div class="dl-row"><dt>Tracking ID</dt><dd class="mono-text" id="confirm-cancelar-tid"></dd></div>
+      </dl>
+    </div>
+    <div class="confirm-footer">
+      <button class="btn btn-ghost" onclick="closeConfirmCancelar()">No, volver</button>
+      <button class="btn btn-danger" onclick="confirmarCancelar()">Sí, cancelar envío</button>
+    </div>
   </div>
 </div>
 
