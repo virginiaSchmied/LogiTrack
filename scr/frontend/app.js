@@ -180,6 +180,14 @@ function formatDatetime(iso) {
   return d.toLocaleDateString('es-AR') + ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// ─── Flujo normal de estados ──────────────────────────────────────────────────
+const SIGUIENTE_ESTADO = {
+  'REGISTRADO':      'EN_TRANSITO',
+  'EN_TRANSITO':     'EN_SUCURSAL',
+  'EN_SUCURSAL':     'EN_DISTRIBUCION',
+  'EN_DISTRIBUCION': 'ENTREGADO',
+};
+
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
 let _envioDetalle = null;
 
@@ -192,8 +200,9 @@ async function openDetalle(trackingId) {
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
-  document.getElementById('btn-eliminar').style.display = 'none';
-  document.getElementById('btn-editar').style.display   = 'none';
+  document.getElementById('btn-eliminar').style.display      = 'none';
+  document.getElementById('btn-editar').style.display        = 'none';
+  document.getElementById('btn-cambiar-estado').style.display = 'none';
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
@@ -205,13 +214,20 @@ async function openDetalle(trackingId) {
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
 
-    const btnEliminar = document.getElementById('btn-eliminar');
-    const btnEditar   = document.getElementById('btn-editar');
+    const btnEliminar      = document.getElementById('btn-eliminar');
+    const btnEditar        = document.getElementById('btn-editar');
+    const btnCambiarEstado = document.getElementById('btn-cambiar-estado');
     if (e.estado !== 'ELIMINADO') {
       btnEliminar.style.display = '';
       btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
       btnEditar.style.display = '';
       btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
+    }
+    const siguienteEstado = SIGUIENTE_ESTADO[e.estado];
+    if (siguienteEstado) {
+      btnCambiarEstado.textContent   = `→ ${BADGE_LABEL[siguienteEstado] || siguienteEstado}`;
+      btnCambiarEstado.style.display = '';
+      btnCambiarEstado.onclick       = () => { closeDetalle(); openEstado(e.tracking_id, e.estado, e.ultima_ubicacion || null); };
     }
 
     body.innerHTML = `
@@ -264,9 +280,10 @@ async function openDetalle(trackingId) {
 }
 
 function closeDetalle() {
-  document.getElementById('modal-overlay').style.display = 'none';
-  document.getElementById('btn-eliminar').style.display  = 'none';
-  document.getElementById('btn-editar').style.display    = 'none';
+  document.getElementById('modal-overlay').style.display       = 'none';
+  document.getElementById('btn-eliminar').style.display        = 'none';
+  document.getElementById('btn-editar').style.display          = 'none';
+  document.getElementById('btn-cambiar-estado').style.display  = 'none';
   document.body.style.overflow = '';
   _envioDetalle = null;
 }
@@ -303,6 +320,136 @@ async function confirmarEliminacion() {
   } catch (err) {
     console.error('Error al eliminar envío:', err);
     alert('No se pudo eliminar el envío. Verificá que el backend esté corriendo.');
+  }
+}
+
+// ─── Cambio de estado ─────────────────────────────────────────────────────────
+let _trackingIdEnCambioEstado = null;
+let _estadoActualEnCambio     = null;
+let _ultimaUbicacion          = null;
+
+function openEstado(trackingId, estadoActual, ultimaUbicacion = null) {
+  _trackingIdEnCambioEstado = trackingId;
+  _estadoActualEnCambio     = estadoActual;
+  _ultimaUbicacion          = ultimaUbicacion;
+
+  const siguiente = SIGUIENTE_ESTADO[estadoActual];
+  document.getElementById('estado-modal-tid').textContent = trackingId;
+  document.getElementById('estado-actual-display').innerHTML =
+    `<span class="badge ${BADGE_CLASS[estadoActual] || 'badge-registrado'}">${escHtml(BADGE_LABEL[estadoActual] || estadoActual)}</span>`;
+  document.getElementById('estado-nuevo-display').innerHTML =
+    `<span class="badge ${BADGE_CLASS[siguiente] || 'badge-registrado'}">${escHtml(BADGE_LABEL[siguiente] || siguiente)}</span>`;
+
+  // Mostrar checkbox solo si hay una ubicación anterior registrada
+  document.getElementById('reusar-wrap').style.display = ultimaUbicacion ? '' : 'none';
+
+  document.getElementById('reusar-ubicacion').checked = false;
+  document.getElementById('ubicacion-form-fields').style.display = '';
+  _clearEstadoErrors();
+  ['estado-calle', 'estado-numero', 'estado-cp', 'estado-ciudad', 'estado-provincia']
+    .forEach(id => { document.getElementById(id).value = ''; });
+
+  document.getElementById('estado-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEstado() {
+  document.getElementById('estado-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  _trackingIdEnCambioEstado = null;
+  _estadoActualEnCambio     = null;
+  _ultimaUbicacion          = null;
+}
+
+function toggleReusar(checked) {
+  if (checked && _ultimaUbicacion) {
+    document.getElementById('estado-calle').value    = _ultimaUbicacion.calle    || '';
+    document.getElementById('estado-numero').value   = _ultimaUbicacion.numero   || '';
+    document.getElementById('estado-cp').value       = _ultimaUbicacion.codigo_postal || '';
+    document.getElementById('estado-ciudad').value   = _ultimaUbicacion.ciudad   || '';
+    document.getElementById('estado-provincia').value= _ultimaUbicacion.provincia|| '';
+    _clearEstadoErrors();
+  } else if (!checked) {
+    ['estado-calle', 'estado-numero', 'estado-cp', 'estado-ciudad', 'estado-provincia']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    _clearEstadoErrors();
+  }
+}
+
+function _clearEstadoErrors() {
+  ['estado-calle', 'estado-numero', 'estado-cp', 'estado-ciudad', 'estado-provincia'].forEach(id => {
+    const input = document.getElementById(id);
+    const error = document.getElementById('err-' + id);
+    if (input) input.setAttribute('aria-invalid', 'false');
+    if (error) error.classList.remove('visible');
+  });
+}
+
+async function submitCambioEstado() {
+  const checks = [
+    ['estado-calle',    validateCalle,       'calle de ubicación'],
+    ['estado-numero',   validateNumero,      'número de ubicación'],
+    ['estado-cp',       validateCP,          'código postal de ubicación'],
+    ['estado-ciudad',   validateTextoSimple, 'ciudad de ubicación'],
+    ['estado-provincia',validateTextoSimple, 'provincia de ubicación'],
+  ];
+  let valid = true;
+  let firstInvalid = null;
+  for (const [id, fn, label] of checks) {
+    const input = document.getElementById(id);
+    const error = document.getElementById('err-' + id);
+    const msg = fn(input.value, label);
+    if (msg) {
+      input.setAttribute('aria-invalid', 'true');
+      error.textContent = msg;
+      error.classList.add('visible');
+      if (valid) firstInvalid = id;
+      valid = false;
+    } else {
+      input.setAttribute('aria-invalid', 'false');
+      error.classList.remove('visible');
+    }
+  }
+  if (!valid) { document.getElementById(firstInvalid).focus(); return; }
+
+  const payload = {
+    nuevo_estado:              SIGUIENTE_ESTADO[_estadoActualEnCambio],
+    reusar_ubicacion_anterior: false,
+    nueva_ubicacion: {
+      calle:         document.getElementById('estado-calle').value.trim(),
+      numero:        document.getElementById('estado-numero').value.trim(),
+      ciudad:        document.getElementById('estado-ciudad').value.trim(),
+      provincia:     document.getElementById('estado-provincia').value.trim(),
+      codigo_postal: document.getElementById('estado-cp').value.trim(),
+    },
+  };
+
+  const btn = document.getElementById('btn-confirmar-estado');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnCambioEstado)}/estado`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(typeof err.detail === 'string' ? err.detail : 'Error al cambiar el estado.');
+      return;
+    }
+    const tid         = _trackingIdEnCambioEstado;
+    const nuevoEstado = SIGUIENTE_ESTADO[_estadoActualEnCambio];
+    closeEstado();
+    showToast(tid, `Estado actualizado: ${BADGE_LABEL[nuevoEstado] || nuevoEstado}`);
+    cargarEnvios(currentQuery, currentPage);
+  } catch (err) {
+    console.error('Error al cambiar estado:', err);
+    alert('No se pudo cambiar el estado. Verificá que el backend esté corriendo.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar cambio';
   }
 }
 
@@ -761,6 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      closeEstado();
       closeEdit();
       closeConfirmDelete();
       closeDetalle();

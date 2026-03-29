@@ -10,6 +10,8 @@ from models import EstadoEnvioEnum, NivelPrioridadEnum
 # ── Dirección ────────────────────────────────────────────────────────────────
 
 class DireccionCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
     calle:         str = Field(..., min_length=2, description="Debe contener letras")
     numero:        str = Field(..., description="Solo números")
     ciudad:        str = Field(..., min_length=2)
@@ -120,6 +122,11 @@ class EnvioOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EnvioOutDetalle(EnvioOut):
+    """EnvioOut extendido con la última ubicación registrada en eventos"""
+    ultima_ubicacion: Optional[DireccionOut] = None
+
+
 # ── Respuesta paginada ────────────────────────────────────────────────────────
 
 class EnvioListResponse(BaseModel):
@@ -149,3 +156,21 @@ class EnvioUpdateOperativo(BaseModel):
         if v < date_type.today():
             raise ValueError("La fecha estimada de entrega no puede ser anterior a hoy")
         return v
+
+
+# ── Cambio de estado ──────────────────────────────────────────────────────────
+
+class EnvioCambioEstado(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    nuevo_estado:              EstadoEnvioEnum
+    nueva_ubicacion:           Optional[DireccionCreate] = None
+    reusar_ubicacion_anterior: bool = False
+
+    @model_validator(mode="after")
+    def ubicacion_requerida(self) -> "EnvioCambioEstado":
+        if self.nueva_ubicacion is None and not self.reusar_ubicacion_anterior:
+            raise ValueError("Debe proveer una ubicación nueva o indicar que se reutiliza la anterior")
+        if self.nueva_ubicacion is not None and self.reusar_ubicacion_anterior:
+            raise ValueError("No puede proveer ubicación nueva y reusar la anterior a la vez")
+        return self

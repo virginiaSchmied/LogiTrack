@@ -281,6 +281,7 @@
         <span id="modal-estado-badge"></span>
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;">
+        <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Avanzar estado del envío"></button>
         <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
         <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
         <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
@@ -307,6 +308,89 @@
     <div class="confirm-footer">
       <button class="btn btn-ghost" onclick="closeConfirmDelete()">Cancelar</button>
       <button class="btn btn-danger" onclick="confirmarEliminacion()">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL CAMBIO ESTADO ══ -->
+<div id="estado-overlay" class="modal-overlay" style="display:none;" onclick="closeEstado()" role="dialog" aria-modal="true" aria-labelledby="estado-modal-tid">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span class="modal-tracking-id" id="estado-modal-tid"></span>
+        <span style="font-size:.78rem;color:var(--text-sub);font-weight:600;">Cambiar estado</span>
+      </div>
+      <button class="modal-close" onclick="closeEstado()" aria-label="Cerrar cambio de estado">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="estado-transicion">
+        <div class="estado-transicion-item">
+          <div class="form-label" style="margin-bottom:.5rem;">Estado actual</div>
+          <div id="estado-actual-display"></div>
+        </div>
+        <div class="estado-flecha" aria-hidden="true">→</div>
+        <div class="estado-transicion-item">
+          <div class="form-label" style="margin-bottom:.5rem;">Nuevo estado</div>
+          <div id="estado-nuevo-display"></div>
+        </div>
+      </div>
+
+      <form id="estado-form" novalidate onsubmit="event.preventDefault(); submitCambioEstado();">
+        <div class="section-title" style="margin-top:1.5rem;">Ubicación actual</div>
+
+        <div id="reusar-wrap" style="display:none;" class="mb-3">
+          <label class="reusar-label">
+            <input type="checkbox" id="reusar-ubicacion" onchange="toggleReusar(this.checked)"/>
+            Mantener la dirección actual
+          </label>
+        </div>
+
+        <div id="ubicacion-form-fields">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="estado-calle">Calle <span class="req">*</span></label>
+                <input type="text" class="form-control" id="estado-calle" aria-required="true" aria-invalid="false" aria-describedby="err-estado-calle"/>
+                <div class="field-error" id="err-estado-calle" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="estado-numero">Número <span class="req">*</span></label>
+                <input type="text" class="form-control" id="estado-numero" aria-required="true" aria-invalid="false" aria-describedby="err-estado-numero" inputmode="numeric"/>
+                <div class="field-error" id="err-estado-numero" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="estado-cp">Código postal <span class="req">*</span></label>
+                <input type="text" class="form-control" id="estado-cp" aria-required="true" aria-invalid="false" aria-describedby="err-estado-cp" inputmode="numeric"/>
+                <div class="field-error" id="err-estado-cp" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="estado-ciudad">Ciudad <span class="req">*</span></label>
+                <input type="text" class="form-control" id="estado-ciudad" aria-required="true" aria-invalid="false" aria-describedby="err-estado-ciudad"/>
+                <div class="field-error" id="err-estado-ciudad" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="estado-provincia">Provincia <span class="req">*</span></label>
+                <input type="text" class="form-control" id="estado-provincia" aria-required="true" aria-invalid="false" aria-describedby="err-estado-provincia"/>
+                <div class="field-error" id="err-estado-provincia" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="closeEstado()">Cancelar</button>
+          <button type="submit" class="btn btn-estado" id="btn-confirmar-estado">Confirmar cambio</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
