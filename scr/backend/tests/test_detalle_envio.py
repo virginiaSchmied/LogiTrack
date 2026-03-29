@@ -20,6 +20,7 @@ _FECHA_FUTURA = str(date.today() + timedelta(days=30))
 PAYLOAD_VALIDO = {
     "remitente": "Juan Pérez",
     "destinatario": "María García",
+    "probabilidad_retraso": 0.5,
     "fecha_entrega_estimada": _FECHA_FUTURA,
     "direccion_origen": {
         "calle": "Av. Corrientes",
@@ -87,7 +88,7 @@ def test_cp0251_busqueda_destinatario_inexistente_retorna_vacio(client):
     assert data["items"] == []
 
 
-def test_cp0252_envios_eliminados_no_aparecen_en_listado(client, db_session):
+def test_cp0252_cp0017_envios_eliminados_no_aparecen_en_listado(client, db_session):
     """CP-0252 — Happy Path: envíos con estado ELIMINADO no aparecen en el listado."""
     from models import Envio
     r = client.post("/envios/", json=PAYLOAD_VALIDO)
@@ -109,5 +110,22 @@ def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client):
     resp = client.get("/envios/?q=")
     assert resp.status_code == 200
     assert resp.json()["total"] == 2
+
+
+# ── LP-118 — Prioridad visible en detalle ────────────────────────────────────
+
+_PAYLOAD_CON_PROB = {**PAYLOAD_VALIDO, "probabilidad_retraso": 0.85}
+
+
+def test_cp0154_prioridad_visible_en_detalle_del_envio(client):
+    """CP-0154 (HP) — CA-5: La prioridad clasificada es visible en el detalle del envío."""
+    r = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    tid = r.json()["tracking_id"]
+    resp = client.get(f"/envios/{tid}")
+    assert resp.status_code == 200
+    assert "prioridad" in resp.json()
+    assert resp.json()["prioridad"] in {"ALTA", "MEDIA", "BAJA"}
+
+
 
 

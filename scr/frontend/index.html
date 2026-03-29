@@ -38,7 +38,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">Envíos registrados<span class="dot" aria-hidden="true">.</span></h1>
-        <p class="page-subtitle">Solo envíos activos · ordenados por fecha de registro</p>
+        <p class="page-subtitle">Solo envíos activos · ordenados por Tracking ID</p>
       </div>
       <button class="btn btn-primary" onclick="showView('form')" aria-label="Registrar nuevo envío">＋ Nuevo envío</button>
     </div>
@@ -74,12 +74,19 @@
               <th scope="col">Ciudad Origen</th>
               <th scope="col">Ciudad Destino</th>
               <th scope="col">Estado</th>
+              <th scope="col">Prioridad</th>
               <th scope="col">Entrega estimada</th>
             </tr>
           </thead>
           <tbody id="table-body"></tbody>
         </table>
       </div>
+
+      <nav class="paginacion" id="paginacion" style="display:none;" aria-label="Paginación de envíos">
+        <button class="btn btn-ghost btn-sm" id="btn-anterior" onclick="paginaAnterior()" aria-label="Página anterior">← Anterior</button>
+        <span class="pag-info" id="pag-info" aria-live="polite"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-siguiente" onclick="paginaSiguiente()" aria-label="Página siguiente">Siguiente →</button>
+      </nav>
 
       <div class="empty-state" id="no-results" style="display:none;" role="status" aria-live="polite">
         <div class="e-icon" aria-hidden="true">🔍</div>
@@ -139,6 +146,16 @@
               <input type="date" class="form-control" id="fecha-entrega" name="fecha-entrega"
                 aria-required="true" aria-invalid="false" aria-describedby="err-fecha-entrega"/>
               <div class="field-error" id="err-fecha-entrega" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="prob-retraso">Probabilidad de retraso <span class="req" aria-label="obligatorio">*</span></label>
+              <input type="number" class="form-control" id="prob-retraso" name="prob-retraso"
+                placeholder="Ej: 0.75" min="0" max="1" step="0.01"
+                aria-required="true" aria-invalid="false" aria-describedby="err-prob-retraso help-prob-retraso"/>
+              <div class="form-text" id="help-prob-retraso">Valor entre 0 y 1. La prioridad se clasificará automáticamente.</div>
+              <div class="field-error" id="err-prob-retraso" role="alert" aria-live="polite"></div>
             </div>
           </div>
         </div>
@@ -263,9 +280,137 @@
         <span class="modal-tracking-id" id="modal-tracking-id" aria-label="Tracking ID"></span>
         <span id="modal-estado-badge"></span>
       </div>
-      <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
+        <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
+        <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
+      </div>
     </div>
     <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══ CONFIRMACIÓN ELIMINACIÓN ══ -->
+<div id="confirm-overlay" class="confirm-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="confirm-box">
+    <div class="confirm-header">
+      <span class="confirm-title" id="confirm-title">Confirmar eliminación</span>
+    </div>
+    <div class="confirm-body">
+      <p class="confirm-desc">¿Estás seguro de que querés eliminar este envío? El registro se conservará en el historial del sistema.</p>
+      <dl class="detail-list">
+        <div class="dl-row"><dt>Tracking ID</dt><dd class="mono-text" id="confirm-tracking-id"></dd></div>
+        <div class="dl-row"><dt>Remitente</dt><dd id="confirm-remitente"></dd></div>
+        <div class="dl-row"><dt>Destinatario</dt><dd id="confirm-destinatario"></dd></div>
+      </dl>
+    </div>
+    <div class="confirm-footer">
+      <button class="btn btn-ghost" onclick="closeConfirmDelete()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarEliminacion()">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL EDICIÓN ══ -->
+<div id="edit-overlay" class="modal-overlay" style="display:none;" onclick="closeEdit()" role="dialog" aria-modal="true" aria-labelledby="edit-modal-tracking-id">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span class="modal-tracking-id" id="edit-modal-tracking-id"></span>
+        <span style="font-size:.78rem;color:var(--text-sub);font-weight:600;">Editar envío</span>
+      </div>
+      <button class="modal-close" onclick="closeEdit()" aria-label="Cerrar edición">✕</button>
+    </div>
+
+    <div class="edit-tabs-bar">
+      <button class="edit-tab active" id="edit-tab-contacto" onclick="switchEditTab('contacto')">Datos de contacto</button>
+      <button class="edit-tab" id="edit-tab-operativo" onclick="switchEditTab('operativo')">Datos operativos</button>
+    </div>
+
+    <!-- Panel: Contacto -->
+    <div id="edit-panel-contacto">
+      <form id="edit-contacto-form" novalidate onsubmit="event.preventDefault(); submitEditContacto();">
+        <div class="modal-body">
+          <div class="form-group mb-3">
+            <label class="form-label" for="edit-destinatario">Nombre del destinatario <span class="req" aria-label="obligatorio">*</span></label>
+            <input type="text" class="form-control" id="edit-destinatario" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destinatario" autocomplete="off"/>
+            <div class="field-error" id="err-edit-destinatario" role="alert" aria-live="polite"></div>
+          </div>
+          <div class="section-title">Dirección de destino</div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="edit-destino-calle">Calle <span class="req">*</span></label>
+                <input type="text" class="form-control" id="edit-destino-calle" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destino-calle"/>
+                <div class="field-error" id="err-edit-destino-calle" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="edit-destino-numero">Número <span class="req">*</span></label>
+                <input type="text" class="form-control" id="edit-destino-numero" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destino-numero" inputmode="numeric"/>
+                <div class="field-error" id="err-edit-destino-numero" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="edit-destino-cp">Código postal <span class="req">*</span></label>
+                <input type="text" class="form-control" id="edit-destino-cp" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destino-cp" inputmode="numeric"/>
+                <div class="field-error" id="err-edit-destino-cp" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="edit-destino-ciudad">Ciudad <span class="req">*</span></label>
+                <input type="text" class="form-control" id="edit-destino-ciudad" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destino-ciudad"/>
+                <div class="field-error" id="err-edit-destino-ciudad" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="edit-destino-provincia">Provincia <span class="req">*</span></label>
+                <input type="text" class="form-control" id="edit-destino-provincia" aria-required="true" aria-invalid="false" aria-describedby="err-edit-destino-provincia"/>
+                <div class="field-error" id="err-edit-destino-provincia" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-contacto">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Panel: Operativo -->
+    <div id="edit-panel-operativo" style="display:none;">
+      <form id="edit-operativo-form" novalidate onsubmit="event.preventDefault(); submitEditOperativo();">
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="edit-fecha-entrega">Fecha estimada de entrega <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="date" class="form-control" id="edit-fecha-entrega" aria-required="true" aria-invalid="false" aria-describedby="err-edit-fecha-entrega"/>
+                <div class="field-error" id="err-edit-fecha-entrega" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="edit-prob-retraso">Probabilidad de retraso <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="number" class="form-control" id="edit-prob-retraso" placeholder="Ej: 0.75" min="0" max="1" step="0.01" aria-required="true" aria-invalid="false" aria-describedby="err-edit-prob-retraso help-edit-prob"/>
+                <div class="form-text" id="help-edit-prob">Valor entre 0 y 1. La prioridad se recalculará automáticamente.</div>
+                <div class="field-error" id="err-edit-prob-retraso" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-operativo">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+
   </div>
 </div>
 
@@ -273,7 +418,7 @@
 <div class="toast" id="toast" role="alert" aria-live="assertive" aria-atomic="true">
   <span class="toast-icon" aria-hidden="true">✅</span>
   <div>
-    <div class="toast-title">Envío registrado correctamente</div>
+    <div class="toast-title" id="toast-title">Envío registrado correctamente</div>
     <div class="toast-sub" id="toast-sub"></div>
   </div>
 </div>

@@ -1,12 +1,16 @@
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
 
 from database import get_db
-from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum
-from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse
+from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum
+from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo
+from ml_predictor import predecir_prioridad
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
 
@@ -83,13 +87,25 @@ def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
 
     # 3. Generar tracking ID y crear envío
     tracking_id = _generar_tracking_id(db)
+
+    # LP-118: predecir prioridad con el modelo ML
+    dias = (payload.fecha_entrega_estimada - date.today()).days
+    prioridad = None
+    try:
+        resultado = predecir_prioridad(payload.probabilidad_retraso, dias)
+        prioridad = NivelPrioridadEnum(resultado)
+    except (ValueError, RuntimeError) as e:
+        logger.warning("No se pudo predecir la prioridad: %s", e)
+
     envio = Envio(
         uuid=uuid.uuid4(),
         tracking_id=tracking_id,
         remitente=payload.remitente,
         destinatario=payload.destinatario,
+        probabilidad_retraso=payload.probabilidad_retraso,
         fecha_entrega_estimada=payload.fecha_entrega_estimada,
         estado=EstadoEnvioEnum.REGISTRADO,
+        prioridad=prioridad,
         direccion_origen_id=origen.id,
         direccion_destino_id=destino.id,
     )
@@ -140,7 +156,7 @@ def listar_envios(
         )
 
     total = query.count()
-    envios = query.order_by(Envio.created_at.desc()).offset(skip).limit(limit).all()
+    envios = query.order_by(Envio.tracking_id.asc()).offset(skip).limit(limit).all()
 
     return EnvioListResponse(
         total=total,
@@ -160,4 +176,124 @@ def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
         raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    return envio
+
+
+# ── DELETE /envios/{tracking_id} ──────────────────────────────────────────────
+
+@router.delete("/{tracking_id}", status_code=200)
+def eliminar_envio(tracking_id: str, db: Session = Depends(get_db)):
+    """
+    Eliminación lógica de un envío: marca el estado como ELIMINADO sin borrar
+    el registro físicamente, preservando el historial de auditoría.
+    Registra un EventoDeEnvio de ELIMINACION.
+    TODO: validar rol=SUPERVISOR cuando se implemente auth.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    if envio.estado == EstadoEnvioEnum.ELIMINADO:
+        raise HTTPException(status_code=409, detail=f"Envío {tracking_id} ya fue eliminado")
+
+    estado_anterior = envio.estado
+    envio.estado    = EstadoEnvioEnum.ELIMINADO
+
+    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
+    USUARIO_SUPERVISOR_SEED = "b1b2c3d4-0002-0002-0002-000000000002"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.ELIMINACION,
+        estado_inicial=estado_anterior,
+        estado_final=EstadoEnvioEnum.ELIMINADO,
+        ubicacion_actual_id=None,
+        usuario_uuid=uuid.UUID(USUARIO_SUPERVISOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    return {"message": f"Envío {tracking_id} eliminado correctamente"}
+
+
+# ── PATCH /envios/{tracking_id}/contacto ─────────────────────────────────────
+
+@router.patch("/{tracking_id}/contacto", response_model=EnvioOut)
+def actualizar_contacto(tracking_id: str, payload: EnvioUpdateContacto, db: Session = Depends(get_db)):
+    """
+    Modifica el destinatario y la dirección de destino de un envío.
+    Registra un EventoDeEnvio de MODIFICACION.
+    TODO: validar rol=OPERADOR cuando se implemente auth.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    if envio.estado == EstadoEnvioEnum.ELIMINADO:
+        raise HTTPException(status_code=409, detail=f"Envío {tracking_id} está eliminado y no puede modificarse")
+
+    envio.destinatario = payload.destinatario
+
+    destino = envio.direccion_destino
+    destino.calle         = payload.direccion_destino.calle
+    destino.numero        = payload.direccion_destino.numero
+    destino.ciudad        = payload.direccion_destino.ciudad
+    destino.provincia     = payload.direccion_destino.provincia
+    destino.codigo_postal = payload.direccion_destino.codigo_postal
+
+    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
+    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.MODIFICACION,
+        estado_inicial=envio.estado,
+        estado_final=envio.estado,
+        ubicacion_actual_id=None,
+        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    db.refresh(envio)
+    return envio
+
+
+# ── PATCH /envios/{tracking_id}/operativo ────────────────────────────────────
+
+@router.patch("/{tracking_id}/operativo", response_model=EnvioOut)
+def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Session = Depends(get_db)):
+    """
+    Modifica la fecha estimada de entrega y la probabilidad de retraso de un envío.
+    Recalcula la prioridad con el modelo ML si se provee probabilidad_retraso.
+    Registra un EventoDeEnvio de MODIFICACION.
+    TODO: validar rol=OPERADOR cuando se implemente auth.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    if envio.estado == EstadoEnvioEnum.ELIMINADO:
+        raise HTTPException(status_code=409, detail=f"Envío {tracking_id} está eliminado y no puede modificarse")
+
+    envio.fecha_entrega_estimada = payload.fecha_entrega_estimada
+    envio.probabilidad_retraso   = payload.probabilidad_retraso
+
+    dias = (payload.fecha_entrega_estimada - date.today()).days
+    envio.prioridad = None
+    try:
+        resultado = predecir_prioridad(payload.probabilidad_retraso, dias)
+        envio.prioridad = NivelPrioridadEnum(resultado)
+    except (ValueError, RuntimeError) as e:
+        logger.warning("No se pudo predecir la prioridad: %s", e)
+
+    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
+    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.MODIFICACION,
+        estado_inicial=envio.estado,
+        estado_final=envio.estado,
+        ubicacion_actual_id=None,
+        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    db.refresh(envio)
     return envio
