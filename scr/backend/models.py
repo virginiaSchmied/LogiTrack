@@ -41,6 +41,13 @@ class AccionEnvioEnum(str, enum.Enum):
     ELIMINACION   = "ELIMINACION"
 
 
+class AccionUsuarioEnum(str, enum.Enum):
+    ALTA   = "ALTA"
+    BAJA   = "BAJA"
+    LOGIN  = "LOGIN"
+    LOGOUT = "LOGOUT"
+
+
 # ── Modelos ─────────────────────────────────────────────────────────────────
 
 class Rol(Base):
@@ -115,3 +122,15 @@ class EventoDeEnvio(Base):
 
     usuario = relationship("Usuario", back_populates="eventos_de_envio")
     envio   = relationship("Envio", back_populates="eventos")
+
+
+class EventoDeUsuario(Base):
+    __tablename__ = "evento_de_usuario"
+
+    uuid                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    accion                = Column(SAEnum(AccionUsuarioEnum, name="accion_usuario"), nullable=False)
+    estado_inicial        = Column(SAEnum(EstadoUsuarioEnum, name="estado_usuario"), nullable=True)
+    estado_final          = Column(SAEnum(EstadoUsuarioEnum, name="estado_usuario"), nullable=False)
+    usuario_ejecutor_uuid = Column(UUID(as_uuid=True), ForeignKey("usuario.uuid"), nullable=False)
+    usuario_afectado_uuid = Column(UUID(as_uuid=True), ForeignKey("usuario.uuid"), nullable=False)
+    fecha_hora            = Column(DateTime(timezone=True), server_default=func.now())

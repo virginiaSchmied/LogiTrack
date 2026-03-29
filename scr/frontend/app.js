@@ -3,6 +3,45 @@
 // ─── Config ───────────────────────────────────────────────────────────────────
 const API_BASE = "http://18.191.173.105:8000";
 
+// ─── Estado de autenticación ──────────────────────────────────────────────────
+let _token    = null;
+let _userEmail = null;
+let _userRole  = null;   // "OPERADOR" | "SUPERVISOR" | "ADMINISTRADOR"
+
+const LS_TOKEN = "lt_token";
+const LS_EMAIL = "lt_email";
+const LS_ROLE  = "lt_role";
+
+function loadAuthState() {
+  _token     = localStorage.getItem(LS_TOKEN) || null;
+  _userEmail = localStorage.getItem(LS_EMAIL) || null;
+  _userRole  = localStorage.getItem(LS_ROLE)  || null;
+}
+
+function saveAuthState(token, email, role) {
+  _token     = token;
+  _userEmail = email;
+  _userRole  = role;
+  localStorage.setItem(LS_TOKEN, token);
+  localStorage.setItem(LS_EMAIL, email);
+  localStorage.setItem(LS_ROLE,  role);
+}
+
+function clearAuthState() {
+  _token = _userEmail = _userRole = null;
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_EMAIL);
+  localStorage.removeItem(LS_ROLE);
+}
+
+function isAuthenticated() {
+  return !!_token;
+}
+
+function authHeaders() {
+  return _token ? { "Authorization": `Bearer ${_token}` } : {};
+}
+
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {
   'REGISTRADO':      'badge-registrado',
@@ -48,18 +87,241 @@ function prioridadBadge(prioridad) {
   return `<span class="badge ${cls}">${escHtml(label)}</span>`;
 }
 
+// ─── Init de la aplicación ────────────────────────────────────────────────────
+function initApp() {
+  loadAuthState();
+  if (isAuthenticated()) {
+    showApp();
+  } else {
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = '';
+  document.getElementById('app-wrapper').style.display  = 'none';
+  // Limpiar errores y campos del form de login
+  document.getElementById('login-email').value    = '';
+  document.getElementById('login-password').value = '';
+  _hideLoginError();
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-wrapper').style.display  = '';
+  applyRoleUI();
+}
+
+// ─── Aplicar la UI según el rol ───────────────────────────────────────────────
+// LP-102: la interfaz muestra u oculta opciones según el rol del usuario.
+function applyRoleUI() {
+  const role = _userRole;
+
+  // Actualizar el badge de usuario en el navbar
+  const badgeText = document.getElementById('user-badge-text');
+  if (badgeText) {
+    const roleLabel = { OPERADOR: 'Operador', SUPERVISOR: 'Supervisor', ADMINISTRADOR: 'Administrador' }[role] || role;
+    badgeText.textContent = `${roleLabel} · ${_userEmail || ''}`;
+  }
+
+  const navTabsEnvios = document.getElementById('nav-tabs-envios');
+  const viewList      = document.getElementById('view-list');
+  const viewForm      = document.getElementById('view-form');
+  const viewAdmin     = document.getElementById('view-admin');
+  const btnNuevoEnvio = document.getElementById('btn-nuevo-envio');
+
+  if (role === 'ADMINISTRADOR') {
+    // LP-102 CA-3: Admin solo ve gestión de usuarios
+    if (navTabsEnvios) navTabsEnvios.style.display = 'none';
+    if (viewAdmin) { viewAdmin.style.display = ''; viewAdmin.classList.add('active'); }
+    if (viewList)  viewList.style.display  = 'none';
+    if (viewForm)  viewForm.style.display  = 'none';
+  } else {
+    // OPERADOR o SUPERVISOR: muestran envíos
+    if (navTabsEnvios) navTabsEnvios.style.display = '';
+    if (viewAdmin) viewAdmin.style.display = 'none';
+
+    // El botón "Nuevo envío" es visible para ambos (LP-102 CA-1 y CA-2)
+    if (btnNuevoEnvio) btnNuevoEnvio.style.display = '';
+
+    // Mostrar la vista de listado como activa por defecto
+    showView('list');
+  }
+}
+
+// ─── Redirigir a login ante error 401 ────────────────────────────────────────
+// LP-21 CA-7 / LP-250 CA-1
+async function handleApiError(res) {
+  if (res.status === 401) {
+    clearAuthState();
+    showLoginScreen();
+    return true; // fue un 401
+  }
+  return false;
+}
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+async function submitLogin() {
+  const emailEl = document.getElementById('login-email');
+  const passEl  = document.getElementById('login-password');
+  const btn     = document.getElementById('btn-login');
+
+  // Validar campos vacíos (LP-21 CA-4)
+  let valid = true;
+  if (!emailEl.value.trim()) {
+    _setLoginFieldError('login-email', 'Ingresá tu email.');
+    valid = false;
+  } else {
+    _clearLoginFieldError('login-email');
+  }
+  if (!passEl.value) {
+    _setLoginFieldError('login-password', 'Ingresá tu contraseña.');
+    valid = false;
+  } else {
+    _clearLoginFieldError('login-password');
+  }
+  if (!valid) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Ingresando…';
+  _hideLoginError();
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailEl.value.trim(), password: passEl.value }),
+    });
+
+    if (!res.ok) {
+      // LP-21 CA-3: mensaje genérico sin revelar qué campo es incorrecto
+      _showLoginError('Email o contraseña incorrectos. Verificá tus datos e intentá de nuevo.');
+      return;
+    }
+
+    const data = await res.json();
+    saveAuthState(data.access_token, data.email, data.nombre_rol);
+    showApp();
+
+  } catch (err) {
+    console.error('Error al iniciar sesión:', err);
+    _showLoginError('No se pudo conectar con el servidor. Verificá que el sistema esté disponible.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingresar';
+  }
+}
+
+function _showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function _hideLoginError() {
+  const el = document.getElementById('login-error');
+  el.classList.remove('visible');
+  el.textContent = '';
+}
+
+function _setLoginFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'true');
+  if (error) { error.textContent = msg; error.classList.add('visible'); }
+}
+
+function _clearLoginFieldError(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+// LP-99: cierra sesión e invalida el token en el cliente.
+async function logout() {
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+  } catch (err) {
+    console.warn('Error al registrar logout en el servidor:', err);
+    // El logout en el cliente procede aunque el servidor falle
+  }
+  clearAuthState();
+  showLoginScreen();
+}
+
+// ─── Consulta pública por tracking ID (LP-136) ───────────────────────────────
+async function buscarPublico() {
+  const input     = document.getElementById('public-track-input');
+  const resultEl  = document.getElementById('public-track-result');
+  const trackingId = input.value.trim().toUpperCase();
+
+  if (!trackingId) {
+    resultEl.style.display = '';
+    resultEl.innerHTML = `<p class="track-error">Ingresá un tracking ID.</p>`;
+    return;
+  }
+
+  resultEl.style.display = '';
+  resultEl.innerHTML = `<p style="font-size:.82rem;color:var(--text-sub)">Consultando…</p>`;
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
+    if (res.status === 404) {
+      resultEl.innerHTML = `<p class="track-error">No se encontró el envío <strong>${escHtml(trackingId)}</strong>. Verificá el tracking ID.</p>`;
+      return;
+    }
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    const e = await res.json();
+    resultEl.innerHTML = `
+      <div class="track-result-card">
+        <div class="track-result-tid">${escHtml(e.tracking_id)}</div>
+        <div class="track-result-row">
+          <span>Estado</span>
+          <span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>
+        </div>
+        <div class="track-result-row">
+          <span>Entrega estimada</span>
+          <strong>${escHtml(formatFecha(e.fecha_entrega_estimada))}</strong>
+        </div>
+        <div class="track-result-row">
+          <span>Destino</span>
+          <strong>${escHtml(e.direccion_destino.ciudad)}, ${escHtml(e.direccion_destino.provincia)}</strong>
+        </div>
+      </div>`;
+  } catch (err) {
+    console.error('Error en consulta pública:', err);
+    resultEl.innerHTML = `<p class="track-error">No se pudo conectar con el servidor.</p>`;
+  }
+}
+
 // ─── Navegación ───────────────────────────────────────────────────────────────
 function showView(viewName) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  // Ocultar todas las vistas
+  document.querySelectorAll('.view').forEach(v => {
+    v.style.display = 'none';
+    v.classList.remove('active');
+  });
   document.querySelectorAll('.nav-tabs button').forEach(b => {
     b.classList.remove('active');
     b.removeAttribute('aria-current');
   });
 
-  document.getElementById('view-' + viewName).classList.add('active');
+  const view = document.getElementById('view-' + viewName);
+  if (view) {
+    view.style.display = '';
+    view.classList.add('active');
+  }
   const tab = document.getElementById('tab-' + viewName);
-  tab.classList.add('active');
-  tab.setAttribute('aria-current', 'page');
+  if (tab) {
+    tab.classList.add('active');
+    tab.setAttribute('aria-current', 'page');
+  }
 
   if (viewName === 'form') resetForm();
   if (viewName === 'list') {
@@ -110,7 +372,9 @@ async function cargarEnvios(q = '', page = 1) {
     if (q.trim()) params.set('q', q.trim());
     const url = `${API_BASE}/envios?${params}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: authHeaders() });
+
+    if (await handleApiError(res)) return; // 401 → ya redirigió a login
     if (!res.ok) throw new Error(`Error ${res.status}`);
 
     const data  = await res.json();
@@ -198,6 +462,7 @@ async function openDetalle(trackingId) {
   document.body.style.overflow = 'hidden';
 
   try {
+    // GET /{tracking_id} es público (LP-136), no requiere token
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
     if (!res.ok) throw new Error(`Error ${res.status}`);
     const e = await res.json();
@@ -205,13 +470,20 @@ async function openDetalle(trackingId) {
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
 
+    // Botones de acción condicionados al rol (LP-102)
     const btnEliminar = document.getElementById('btn-eliminar');
     const btnEditar   = document.getElementById('btn-editar');
     if (e.estado !== 'ELIMINADO') {
-      btnEliminar.style.display = '';
-      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
-      btnEditar.style.display = '';
-      btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
+      // Editar: Operador y Supervisor (LP-102 CA-1 y CA-2)
+      if (_userRole === 'OPERADOR' || _userRole === 'SUPERVISOR') {
+        btnEditar.style.display = '';
+        btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
+      }
+      // Eliminar: solo Supervisor (LP-102 CA-2, LP-249 CA-1, LP-252 CA-3)
+      if (_userRole === 'SUPERVISOR') {
+        btnEliminar.style.display = '';
+        btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+      }
     }
 
     body.innerHTML = `
@@ -296,7 +568,9 @@ async function confirmarEliminacion() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`, {
       method: 'DELETE',
+      headers: authHeaders(),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) throw new Error(`Error ${res.status}`);
     showToast(trackingId, 'Envío eliminado correctamente');
     cargarEnvios(currentQuery, 1);
@@ -417,9 +691,10 @@ async function submitEditContacto() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/contacto`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) {
       const err = await res.json();
       if (Array.isArray(err.detail)) {
@@ -484,9 +759,10 @@ async function submitEditOperativo() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/operativo`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) {
       const err = await res.json();
       if (Array.isArray(err.detail)) {
@@ -677,9 +953,11 @@ async function submitForm() {
   try {
     const res = await fetch(`${API_BASE}/envios`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+
+    if (await handleApiError(res)) return;
 
     if (!res.ok) {
       const err = await res.json();
@@ -743,22 +1021,43 @@ function escHtml(str) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Inicializar aplicación (verificar sesión)
+  initApp();
+
+  // Eventos del form de login
+  ['login-email', 'login-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => _clearLoginFieldError(id));
+  });
+
+  // Enter en el input de consulta pública
+  const trackInput = document.getElementById('public-track-input');
+  if (trackInput) {
+    trackInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscarPublico();
+    });
+  }
+
+  // Eventos de validación en formulario de alta
   Object.keys(FIELDS).forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => clearFieldError(id));
   });
 
-  let searchTimer;
-  document.getElementById('search-input').addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(
-      () => cargarEnvios(document.getElementById('search-input').value, 1),
-      300
-    );
-  });
+  // Búsqueda con debounce
+  const searchEl = document.getElementById('search-input');
+  if (searchEl) {
+    let searchTimer;
+    searchEl.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(
+        () => cargarEnvios(searchEl.value, 1),
+        300
+      );
+    });
+  }
 
-  cargarEnvios();
-
+  // Escape para cerrar modales
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       closeEdit();

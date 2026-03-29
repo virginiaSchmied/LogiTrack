@@ -8,9 +8,10 @@ from sqlalchemy import func
 from datetime import date
 
 from database import get_db
-from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum
+from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
 from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo
 from ml_predictor import predecir_prioridad
+from auth import require_operador_supervisor, require_supervisor
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
 
@@ -55,11 +56,15 @@ def _build_envio_list_item(envio: Envio) -> EnvioListItem:
 # ── POST /envios ─────────────────────────────────────────────────────────────
 
 @router.post("/", response_model=EnvioOut, status_code=201)
-def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
+def crear_envio(
+    payload: EnvioCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Registra un nuevo envío con sus direcciones de origen y destino.
     Genera el tracking ID automáticamente y registra el EventoDeEnvio de CREACION.
-    Cubre LP-2.
+    Requiere rol Operador o Supervisor. Cubre LP-2, LP-249.
     """
     # 1. Persistir dirección de origen
     origen = Direccion(
@@ -71,7 +76,7 @@ def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
         codigo_postal=payload.direccion_origen.codigo_postal,
     )
     db.add(origen)
-    db.flush()  # obtener el id sin hacer commit todavía
+    db.flush()
 
     # 2. Persistir dirección de destino
     destino = Direccion(
@@ -112,16 +117,14 @@ def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
     db.add(envio)
     db.flush()
 
-    # 4. Registrar EventoDeEnvio de CREACION automáticamente (LP-106)
-    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
-    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
+    # 4. Registrar EventoDeEnvio de CREACION (LP-106)
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.CREACION,
         estado_inicial=None,
         estado_final=EstadoEnvioEnum.REGISTRADO,
         ubicacion_actual_id=None,
-        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)
@@ -139,11 +142,12 @@ def listar_envios(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
 ):
     """
     Lista todos los envíos activos (excluye ELIMINADO).
     Soporta búsqueda por tracking ID, remitente o destinatario.
-    Cubre LP-3 (listado) y LP-4 (búsqueda).
+    Requiere rol Operador o Supervisor. Cubre LP-3 (listado), LP-4 (búsqueda), LP-249.
     """
     query = db.query(Envio).filter(Envio.estado != EstadoEnvioEnum.ELIMINADO)
 
@@ -170,8 +174,7 @@ def listar_envios(
 def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
     """
     Devuelve el detalle de un envío por tracking ID.
-    Usado para la consulta pública — solo expone ciudad de origen/destino
-    a través del schema EnvioOut (LP-136 se maneja en el frontend).
+    Endpoint de acceso público — no requiere autenticación. LP-136, LP-250 CA-4.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -182,12 +185,16 @@ def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
 # ── DELETE /envios/{tracking_id} ──────────────────────────────────────────────
 
 @router.delete("/{tracking_id}", status_code=200)
-def eliminar_envio(tracking_id: str, db: Session = Depends(get_db)):
+def eliminar_envio(
+    tracking_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_supervisor),
+):
     """
     Eliminación lógica de un envío: marca el estado como ELIMINADO sin borrar
     el registro físicamente, preservando el historial de auditoría.
     Registra un EventoDeEnvio de ELIMINACION.
-    TODO: validar rol=SUPERVISOR cuando se implemente auth.
+    Requiere rol Supervisor. Cubre LP-7, LP-249 CA-1, LP-252 CA-3.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -198,15 +205,13 @@ def eliminar_envio(tracking_id: str, db: Session = Depends(get_db)):
     estado_anterior = envio.estado
     envio.estado    = EstadoEnvioEnum.ELIMINADO
 
-    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
-    USUARIO_SUPERVISOR_SEED = "b1b2c3d4-0002-0002-0002-000000000002"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.ELIMINACION,
         estado_inicial=estado_anterior,
         estado_final=EstadoEnvioEnum.ELIMINADO,
         ubicacion_actual_id=None,
-        usuario_uuid=uuid.UUID(USUARIO_SUPERVISOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)
@@ -217,11 +222,16 @@ def eliminar_envio(tracking_id: str, db: Session = Depends(get_db)):
 # ── PATCH /envios/{tracking_id}/contacto ─────────────────────────────────────
 
 @router.patch("/{tracking_id}/contacto", response_model=EnvioOut)
-def actualizar_contacto(tracking_id: str, payload: EnvioUpdateContacto, db: Session = Depends(get_db)):
+def actualizar_contacto(
+    tracking_id: str,
+    payload: EnvioUpdateContacto,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Modifica el destinatario y la dirección de destino de un envío.
     Registra un EventoDeEnvio de MODIFICACION.
-    TODO: validar rol=OPERADOR cuando se implemente auth.
+    Requiere rol Operador o Supervisor. Cubre LP-148, LP-249.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -238,15 +248,13 @@ def actualizar_contacto(tracking_id: str, payload: EnvioUpdateContacto, db: Sess
     destino.provincia     = payload.direccion_destino.provincia
     destino.codigo_postal = payload.direccion_destino.codigo_postal
 
-    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
-    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.MODIFICACION,
         estado_inicial=envio.estado,
         estado_final=envio.estado,
         ubicacion_actual_id=None,
-        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)
@@ -258,12 +266,17 @@ def actualizar_contacto(tracking_id: str, payload: EnvioUpdateContacto, db: Sess
 # ── PATCH /envios/{tracking_id}/operativo ────────────────────────────────────
 
 @router.patch("/{tracking_id}/operativo", response_model=EnvioOut)
-def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Session = Depends(get_db)):
+def actualizar_operativo(
+    tracking_id: str,
+    payload: EnvioUpdateOperativo,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Modifica la fecha estimada de entrega y la probabilidad de retraso de un envío.
     Recalcula la prioridad con el modelo ML si se provee probabilidad_retraso.
     Registra un EventoDeEnvio de MODIFICACION.
-    TODO: validar rol=OPERADOR cuando se implemente auth.
+    Requiere rol Operador o Supervisor. Cubre LP-154, LP-249.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -282,15 +295,13 @@ def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Se
     except (ValueError, RuntimeError) as e:
         logger.warning("No se pudo predecir la prioridad: %s", e)
 
-    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
-    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.MODIFICACION,
         estado_inicial=envio.estado,
         estado_final=envio.estado,
         ubicacion_actual_id=None,
-        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)

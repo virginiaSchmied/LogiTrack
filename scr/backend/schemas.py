@@ -7,6 +7,20 @@ import re
 from models import EstadoEnvioEnum, NivelPrioridadEnum
 
 
+# ── Autenticación ─────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email:    str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+    email:        str
+    nombre_rol:   str
+
+
 # ── Dirección ────────────────────────────────────────────────────────────────
 
 class DireccionCreate(BaseModel):

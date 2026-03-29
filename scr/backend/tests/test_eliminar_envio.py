@@ -2,7 +2,8 @@
 Tests para la eliminación lógica de envíos.
 
 Cubre:
-  LP-7 — Eliminar envío
+  LP-7  — Eliminar envío
+  LP-21 — Solo Supervisor puede eliminar (LP-249 CA-1, LP-252 CA-3)
 
   CP-0016 (HP) — CA-3: Eliminación lógica exitosa
   CP-0017 (HP) — CA-4: El envío eliminado desaparece del listado general
@@ -36,48 +37,63 @@ PAYLOAD_VALIDO = {
 }
 
 
-def _crear_envio(client) -> str:
+def _crear_envio(client, headers_operador) -> str:
     """Crea un envío y devuelve su tracking_id."""
-    r = client.post("/envios/", json=PAYLOAD_VALIDO)
+    r = client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
     assert r.status_code == 201
     return r.json()["tracking_id"]
+
+
+# ── LP-21 — Control de acceso ─────────────────────────────────────────────────
+
+class TestControlAccesoEliminacion:
+
+    def test_sin_token_retorna_401(self, client, headers_operador):
+        """DELETE sin autenticación → 401."""
+        tid = _crear_envio(client, headers_operador)
+        assert client.delete(f"/envios/{tid}").status_code == 401
+
+    def test_operador_no_puede_eliminar_retorna_403(self, client, headers_operador):
+        """Operador intenta eliminar → 403 Forbidden (solo Supervisor puede). LP-249 CA-1."""
+        tid = _crear_envio(client, headers_operador)
+        assert client.delete(f"/envios/{tid}", headers=headers_operador).status_code == 403
 
 
 # ── CP-0016 — CA-3: Eliminación lógica exitosa ────────────────────────────────
 
 class TestCP0016EliminacionLogica:
 
-    def test_cp0016_delete_retorna_200(self, client):
+    def test_cp0016_delete_retorna_200(self, client, headers_operador, headers_supervisor):
         """CP-0016 (HP) — DELETE sobre envío existente retorna 200."""
-        tid = _crear_envio(client)
-        resp = client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        resp = client.delete(f"/envios/{tid}", headers=headers_supervisor)
         assert resp.status_code == 200
 
-    def test_cp0016_envio_queda_marcado_como_eliminado_en_bd(self, client, db_session):
+    def test_cp0016_envio_queda_marcado_como_eliminado_en_bd(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0016 (HP) — Después del DELETE, el estado en BD es ELIMINADO."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio is not None
         assert envio.estado == EstadoEnvioEnum.ELIMINADO
 
-    def test_cp0016_envio_no_borrado_fisicamente(self, client, db_session):
+    def test_cp0016_envio_no_borrado_fisicamente(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0016 (HP) — El registro del envío sigue existiendo en BD tras la eliminación."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio is not None
 
-    def test_cp0016_delete_envio_inexistente_retorna_404(self, client):
+    def test_cp0016_delete_envio_inexistente_retorna_404(self, client, headers_supervisor):
         """CP-0016 (UP) — DELETE sobre tracking ID inexistente retorna 404."""
-        resp = client.delete("/envios/LT-99999999")
+        resp = client.delete("/envios/LT-99999999", headers=headers_supervisor)
         assert resp.status_code == 404
 
-    def test_cp0016_delete_envio_ya_eliminado_retorna_409(self, client):
+    def test_cp0016_delete_envio_ya_eliminado_retorna_409(self, client, headers_operador, headers_supervisor):
         """CP-0016 (Edge) — DELETE sobre envío ya eliminado retorna 409."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
-        resp = client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
+        resp = client.delete(f"/envios/{tid}", headers=headers_supervisor)
         assert resp.status_code == 409
 
 
@@ -85,31 +101,31 @@ class TestCP0016EliminacionLogica:
 
 class TestCP0017EliminadoNoAparece:
 
-    def test_cp0017_envio_eliminado_no_aparece_en_listado(self, client):
+    def test_cp0017_envio_eliminado_no_aparece_en_listado(self, client, headers_operador, headers_supervisor):
         """CP-0017 (HP) — Envío eliminado no aparece en GET /envios/."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
-        resp = client.get("/envios/")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
+        resp = client.get("/envios/", headers=headers_operador)
         assert resp.status_code == 200
         tracking_ids = [e["tracking_id"] for e in resp.json()["items"]]
         assert tid not in tracking_ids
 
-    def test_cp0017_total_disminuye_tras_eliminacion(self, client):
+    def test_cp0017_total_disminuye_tras_eliminacion(self, client, headers_operador, headers_supervisor):
         """CP-0017 (HP) — El total del listado disminuye en 1 tras eliminar un envío."""
-        _crear_envio(client)
-        _crear_envio(client)
-        total_antes = client.get("/envios/").json()["total"]
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
-        total_despues = client.get("/envios/").json()["total"]
+        _crear_envio(client, headers_operador)
+        _crear_envio(client, headers_operador)
+        total_antes = client.get("/envios/", headers=headers_operador).json()["total"]
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
+        total_despues = client.get("/envios/", headers=headers_operador).json()["total"]
         assert total_despues == total_antes
 
-    def test_cp0017_envios_activos_no_se_ven_afectados(self, client):
+    def test_cp0017_envios_activos_no_se_ven_afectados(self, client, headers_operador, headers_supervisor):
         """CP-0017 (HP) — Los envíos activos siguen apareciendo tras eliminar otro."""
-        tid_activo = _crear_envio(client)
-        tid_a_eliminar = _crear_envio(client)
-        client.delete(f"/envios/{tid_a_eliminar}")
-        resp = client.get("/envios/")
+        tid_activo = _crear_envio(client, headers_operador)
+        tid_a_eliminar = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid_a_eliminar}", headers=headers_supervisor)
+        resp = client.get("/envios/", headers=headers_operador)
         tracking_ids = [e["tracking_id"] for e in resp.json()["items"]]
         assert tid_activo in tracking_ids
 
@@ -118,10 +134,10 @@ class TestCP0017EliminadoNoAparece:
 
 class TestCP0018HistorialConservado:
 
-    def test_cp0018_evento_eliminacion_registrado_en_bd(self, client, db_session):
+    def test_cp0018_evento_eliminacion_registrado_en_bd(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0018 (HP) — Tras el DELETE existe un EventoDeEnvio con accion=ELIMINACION."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = db_session.query(EventoDeEnvio).filter(
             EventoDeEnvio.envio_uuid == envio.uuid,
@@ -129,10 +145,10 @@ class TestCP0018HistorialConservado:
         ).first()
         assert evento is not None
 
-    def test_cp0018_evento_eliminacion_refleja_estado_final_correcto(self, client, db_session):
+    def test_cp0018_evento_eliminacion_refleja_estado_final_correcto(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0018 (HP) — El EventoDeEnvio de ELIMINACION tiene estado_final = ELIMINADO."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = db_session.query(EventoDeEnvio).filter(
             EventoDeEnvio.envio_uuid == envio.uuid,
@@ -140,10 +156,10 @@ class TestCP0018HistorialConservado:
         ).first()
         assert evento.estado_final == EstadoEnvioEnum.ELIMINADO
 
-    def test_cp0018_evento_creacion_previo_se_conserva(self, client, db_session):
+    def test_cp0018_evento_creacion_previo_se_conserva(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0018 (HP) — El EventoDeEnvio de CREACION sigue existiendo tras la eliminación."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento_creacion = db_session.query(EventoDeEnvio).filter(
             EventoDeEnvio.envio_uuid == envio.uuid,
@@ -151,15 +167,15 @@ class TestCP0018HistorialConservado:
         ).first()
         assert evento_creacion is not None
 
-    def test_cp0018_historial_tiene_dos_eventos_tras_eliminacion(self, client, db_session):
+    def test_cp0018_historial_tiene_dos_eventos_tras_eliminacion(self, client, db_session, headers_operador, headers_supervisor):
         """CP-0018 (HP) — Tras la eliminación el historial tiene exactamente 2 eventos: CREACION y ELIMINACION."""
-        tid = _crear_envio(client)
-        client.delete(f"/envios/{tid}")
+        tid = _crear_envio(client, headers_operador)
+        client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         eventos = db_session.query(EventoDeEnvio).filter(
             EventoDeEnvio.envio_uuid == envio.uuid,
         ).all()
         assert len(eventos) == 2
         acciones = {e.accion for e in eventos}
-        assert AccionEnvioEnum.CREACION  in acciones
+        assert AccionEnvioEnum.CREACION   in acciones
         assert AccionEnvioEnum.ELIMINACION in acciones

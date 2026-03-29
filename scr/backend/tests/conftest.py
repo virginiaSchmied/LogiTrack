@@ -4,6 +4,7 @@ import os
 # no intente conectarse a la DB de producción durante los tests.
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 import models  # noqa: F401 — necesario para registrar las tablas en Base.metadata
 from database import Base, get_db
 from main import app
+from auth import hash_password, create_access_token
 
 # StaticPool fuerza que todas las conexiones compartan la misma DB en memoria.
 # Sin esto, create_all y la app usan conexiones distintas (cada una vacía).
@@ -34,11 +36,57 @@ def _override_get_db():
 
 app.dependency_overrides[get_db] = _override_get_db
 
+# ── UUIDs fijos para los tests ────────────────────────────────────────────────
+
+ROL_OPERADOR_UUID   = uuid.UUID("11111111-0001-0001-0001-000000000001")
+ROL_SUPERVISOR_UUID = uuid.UUID("11111111-0001-0001-0001-000000000002")
+ROL_ADMIN_UUID      = uuid.UUID("11111111-0001-0001-0001-000000000003")
+
+USUARIO_OPERADOR_UUID   = uuid.UUID("22222222-0002-0002-0002-000000000001")
+USUARIO_SUPERVISOR_UUID = uuid.UUID("22222222-0002-0002-0002-000000000002")
+
+
+def _seed_db(db):
+    """Inserta los roles y usuarios mínimos requeridos por los tests."""
+    roles = [
+        models.Rol(uuid=ROL_OPERADOR_UUID,   nombre="OPERADOR"),
+        models.Rol(uuid=ROL_SUPERVISOR_UUID, nombre="SUPERVISOR"),
+        models.Rol(uuid=ROL_ADMIN_UUID,      nombre="ADMINISTRADOR"),
+    ]
+    db.add_all(roles)
+    db.flush()
+
+    users = [
+        models.Usuario(
+            uuid=USUARIO_OPERADOR_UUID,
+            email="operador@test.com",
+            contrasena_hash=hash_password("test1234"),
+            estado=models.EstadoUsuarioEnum.ALTA,
+            rol_uuid=ROL_OPERADOR_UUID,
+        ),
+        models.Usuario(
+            uuid=USUARIO_SUPERVISOR_UUID,
+            email="supervisor@test.com",
+            contrasena_hash=hash_password("test1234"),
+            estado=models.EstadoUsuarioEnum.ALTA,
+            rol_uuid=ROL_SUPERVISOR_UUID,
+        ),
+    ]
+    db.add_all(users)
+    db.commit()
+
+
+def _make_token(user_uuid: uuid.UUID, email: str, rol: str) -> str:
+    return create_access_token(sub=str(user_uuid), email=email, rol=rol)
+
 
 @pytest.fixture()
 def client():
     """TestClient con base de datos SQLite en memoria, reseteada entre tests."""
     Base.metadata.create_all(bind=_ENGINE)
+    db = _SessionLocal()
+    _seed_db(db)
+    db.close()
     with TestClient(app) as c:
         yield c
     Base.metadata.drop_all(bind=_ENGINE)
@@ -50,3 +98,17 @@ def db_session(client):
     db = _SessionLocal()
     yield db
     db.close()
+
+
+@pytest.fixture()
+def headers_operador():
+    """Headers HTTP con JWT de rol Operador."""
+    token = _make_token(USUARIO_OPERADOR_UUID, "operador@test.com", "OPERADOR")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def headers_supervisor():
+    """Headers HTTP con JWT de rol Supervisor."""
+    token = _make_token(USUARIO_SUPERVISOR_UUID, "supervisor@test.com", "SUPERVISOR")
+    return {"Authorization": f"Bearer {token}"}

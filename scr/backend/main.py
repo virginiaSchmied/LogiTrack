@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import envios
+from routers import auth_router
 
 app = FastAPI(
     title="LogiTrack API",
@@ -19,6 +20,7 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth_router.router)
 app.include_router(envios.router)
 
 
