@@ -12,11 +12,12 @@ from models import EstadoEnvioEnum, NivelPrioridadEnum
 class DireccionCreate(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    calle:         str = Field(..., min_length=2, description="Debe contener letras")
-    numero:        str = Field(..., description="Solo números")
-    ciudad:        str = Field(..., min_length=2)
-    provincia:     str = Field(..., min_length=2)
-    codigo_postal: str = Field(..., description="Solo números")
+    calle:         str = Field(..., min_length=2, description="Debe contener letras",
+                               examples=["Av. Corrientes"])
+    numero:        str = Field(..., description="Solo números", examples=["1234"])
+    ciudad:        str = Field(..., min_length=2, examples=["Buenos Aires"])
+    provincia:     str = Field(..., min_length=2, examples=["CABA"])
+    codigo_postal: str = Field(..., description="Solo números", examples=["1043"])
 
     @field_validator("calle")
     @classmethod
@@ -56,12 +57,21 @@ class DireccionOut(BaseModel):
 class EnvioCreate(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    remitente:              str = Field(..., min_length=1, max_length=255)
-    destinatario:           str = Field(..., min_length=1, max_length=255)
-    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0)
-    fecha_entrega_estimada: date
-    direccion_origen:       DireccionCreate
-    direccion_destino:      DireccionCreate
+    remitente:              str   = Field(..., min_length=1, max_length=255,
+                                          examples=["Juan Pérez"])
+    destinatario:           str   = Field(..., min_length=1, max_length=255,
+                                          examples=["María García"])
+    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0,
+                                          examples=[0.75])
+    fecha_entrega_estimada: date  = Field(..., examples=["2026-05-15"])
+    direccion_origen:       DireccionCreate = Field(..., examples=[{
+        "calle": "Av. Corrientes", "numero": "1234",
+        "ciudad": "Buenos Aires", "provincia": "CABA", "codigo_postal": "1043",
+    }])
+    direccion_destino:      DireccionCreate = Field(..., examples=[{
+        "calle": "Belgrano", "numero": "890",
+        "ciudad": "Córdoba", "provincia": "Córdoba", "codigo_postal": "5000",
+    }])
 
     @field_validator("fecha_entrega_estimada")
     @classmethod
@@ -140,15 +150,19 @@ class EnvioListResponse(BaseModel):
 class EnvioUpdateContacto(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    destinatario:      str = Field(..., min_length=1, max_length=255)
-    direccion_destino: DireccionCreate
+    destinatario:      str = Field(..., min_length=1, max_length=255,
+                                   examples=["Carlos López"])
+    direccion_destino: DireccionCreate = Field(..., examples=[{
+        "calle": "San Martín", "numero": "321",
+        "ciudad": "Rosario", "provincia": "Santa Fe", "codigo_postal": "2000",
+    }])
 
 
 class EnvioUpdateOperativo(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    fecha_entrega_estimada: date
-    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0)
+    fecha_entrega_estimada: date  = Field(..., examples=["2026-05-20"])
+    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0, examples=[0.60])
 
     @field_validator("fecha_entrega_estimada")
     @classmethod
@@ -164,6 +178,9 @@ class EnvioUpdateOperativo(BaseModel):
 class EnvioCambioEstado(BaseModel):
     model_config = {"str_strip_whitespace": True}
 
-    nuevo_estado:              EstadoEnvioEnum
-    nueva_ubicacion:           Optional[DireccionCreate] = None
-    reusar_ubicacion_anterior: bool = False
+    nuevo_estado:              EstadoEnvioEnum = Field(..., examples=["EN_DEPOSITO"])
+    nueva_ubicacion:           Optional[DireccionCreate] = Field(None, examples=[{
+        "calle": "Mitre", "numero": "456",
+        "ciudad": "Mendoza", "provincia": "Mendoza", "codigo_postal": "5500",
+    }])
+    reusar_ubicacion_anterior: bool = Field(False, examples=[False])
