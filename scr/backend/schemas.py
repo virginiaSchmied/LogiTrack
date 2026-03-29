@@ -65,8 +65,8 @@ class EnvioCreate(BaseModel):
                                           examples=[0.75])
     fecha_entrega_estimada: date  = Field(..., examples=["2026-05-15"])
     direccion_origen:       DireccionCreate = Field(..., examples=[{
-        "calle": "Av. Corrientes", "numero": "1234",
-        "ciudad": "Buenos Aires", "provincia": "CABA", "codigo_postal": "1043",
+        "calle": "San Martín", "numero": "321",
+        "ciudad": "Rosario", "provincia": "Santa Fe", "codigo_postal": "2000",
     }])
     direccion_destino:      DireccionCreate = Field(..., examples=[{
         "calle": "Belgrano", "numero": "890",
