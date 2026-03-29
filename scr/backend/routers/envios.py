@@ -178,3 +178,38 @@ def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
     if not envio:
         raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
     return envio
+
+
+# ── DELETE /envios/{tracking_id} ──────────────────────────────────────────────
+
+@router.delete("/{tracking_id}", status_code=200)
+def eliminar_envio(tracking_id: str, db: Session = Depends(get_db)):
+    """
+    Eliminación lógica de un envío: marca el estado como ELIMINADO sin borrar
+    el registro físicamente, preservando el historial de auditoría.
+    Registra un EventoDeEnvio de ELIMINACION.
+    TODO: validar rol=SUPERVISOR cuando se implemente auth.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    if envio.estado == EstadoEnvioEnum.ELIMINADO:
+        raise HTTPException(status_code=409, detail=f"Envío {tracking_id} ya fue eliminado")
+
+    estado_anterior = envio.estado
+    envio.estado    = EstadoEnvioEnum.ELIMINADO
+
+    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
+    USUARIO_SUPERVISOR_SEED = "b1b2c3d4-0002-0002-0002-000000000002"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.ELIMINACION,
+        estado_inicial=estado_anterior,
+        estado_final=EstadoEnvioEnum.ELIMINADO,
+        ubicacion_actual_id=None,
+        usuario_uuid=uuid.UUID(USUARIO_SUPERVISOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    return {"message": f"Envío {tracking_id} eliminado correctamente"}

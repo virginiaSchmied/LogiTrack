@@ -190,6 +190,7 @@ async function openDetalle(trackingId) {
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
+  document.getElementById('btn-eliminar').style.display = 'none';
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
@@ -199,6 +200,12 @@ async function openDetalle(trackingId) {
     const e = await res.json();
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
+
+    const btnEliminar = document.getElementById('btn-eliminar');
+    if (e.estado !== 'ELIMINADO') {
+      btnEliminar.style.display = '';
+      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+    }
 
     body.innerHTML = `
       <div class="detail-grid">
@@ -251,7 +258,43 @@ async function openDetalle(trackingId) {
 
 function closeDetalle() {
   document.getElementById('modal-overlay').style.display = 'none';
+  document.getElementById('btn-eliminar').style.display  = 'none';
   document.body.style.overflow = '';
+}
+
+// ─── Eliminación de envío ─────────────────────────────────────────────────────
+let _envioAEliminar = null;
+
+function openConfirmDelete(trackingId, remitente, destinatario) {
+  _envioAEliminar = trackingId;
+  document.getElementById('confirm-tracking-id').textContent  = trackingId;
+  document.getElementById('confirm-remitente').textContent    = remitente;
+  document.getElementById('confirm-destinatario').textContent = destinatario;
+  document.getElementById('confirm-overlay').style.display    = 'flex';
+}
+
+function closeConfirmDelete() {
+  document.getElementById('confirm-overlay').style.display = 'none';
+  _envioAEliminar = null;
+}
+
+async function confirmarEliminacion() {
+  if (!_envioAEliminar) return;
+  const trackingId = _envioAEliminar;
+  closeConfirmDelete();
+  closeDetalle();
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    showToast(trackingId, 'Envío eliminado correctamente');
+    cargarEnvios(currentQuery, 1);
+  } catch (err) {
+    console.error('Error al eliminar envío:', err);
+    alert('No se pudo eliminar el envío. Verificá que el backend esté corriendo.');
+  }
 }
 
 // ─── Definición de campos y sus validaciones ──────────────────────────────────
@@ -460,9 +503,10 @@ function resetForm() {
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
-function showToast(tid) {
+function showToast(tid, titulo = 'Envío registrado correctamente') {
   const toast = document.getElementById('toast');
-  document.getElementById('toast-sub').textContent = tid;
+  document.getElementById('toast-title').textContent = titulo;
+  document.getElementById('toast-sub').textContent   = tid;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3500);
 }
@@ -493,6 +537,9 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarEnvios();
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeDetalle();
+    if (e.key === 'Escape') {
+      closeConfirmDelete();
+      closeDetalle();
+    }
   });
 });

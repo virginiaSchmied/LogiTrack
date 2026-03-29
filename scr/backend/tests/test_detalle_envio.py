@@ -87,7 +87,7 @@ def test_cp0251_busqueda_destinatario_inexistente_retorna_vacio(client):
     assert data["items"] == []
 
 
-def test_cp0252_envios_eliminados_no_aparecen_en_listado(client, db_session):
+def test_cp0252_cp0017_envios_eliminados_no_aparecen_en_listado(client, db_session):
     """CP-0252 — Happy Path: envíos con estado ELIMINADO no aparecen en el listado."""
     from models import Envio
     r = client.post("/envios/", json=PAYLOAD_VALIDO)

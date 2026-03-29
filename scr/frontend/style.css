@@ -96,6 +96,20 @@ body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;font-s
 .btn-ghost{background:var(--surface);color:var(--text-sub);border:1.5px solid var(--border2)}
 .btn-ghost:hover:not(:disabled){color:var(--text);background:var(--surface2);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 
+/* DANGER BUTTON */
+.btn-danger{background:var(--danger);color:#fff;box-shadow:0 1px 3px rgba(185,28,28,.3)}
+.btn-danger:hover:not(:disabled){background:#991b1b;transform:translateY(-1px);box-shadow:0 4px 14px rgba(185,28,28,.35)}
+.btn-danger:active{transform:translateY(0);box-shadow:none}
+
+/* CONFIRMACIÓN ELIMINACIÓN */
+.confirm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.65);backdrop-filter:blur(2px);z-index:600;display:flex;align-items:center;justify-content:center;padding:1.5rem;animation:fadeIn .15s ease}
+.confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:440px;animation:slideUp .2s ease}
+.confirm-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border)}
+.confirm-title{font-size:1rem;font-weight:700;color:var(--danger)}
+.confirm-body{padding:1.25rem 1.5rem}
+.confirm-desc{font-size:.84rem;color:var(--text-sub);margin-bottom:1.25rem;margin-top:0}
+.confirm-footer{display:flex;justify-content:flex-end;gap:.75rem;padding:1rem 1.5rem;border-top:1px solid var(--border)}
+
 /* TOOLBAR */
 .toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap}
 .count-badge{font-family:'DM Mono',monospace;font-size:.72rem;font-weight:500;background:var(--primary-dim);color:var(--primary);border:1px solid rgba(29,78,216,.2);border-radius:20px;padding:.22rem .75rem}
