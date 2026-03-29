@@ -1,0 +1,10 @@
+{
+  "name": "logitrack-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "lint": "eslint app.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}
