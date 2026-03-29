@@ -9,7 +9,10 @@ from datetime import date
 
 from database import get_db
 from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum
-from schemas import EnvioCreate, EnvioOut, EnvioOutDetalle, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo, EnvioCambioEstado, DireccionOut
+from schemas import (
+    EnvioCreate, EnvioOut, EnvioOutDetalle, EnvioListItem, EnvioListResponse,
+    EnvioUpdateContacto, EnvioUpdateOperativo, EnvioCambioEstado, DireccionOut,
+)
 from ml_predictor import predecir_prioridad
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
@@ -33,10 +36,12 @@ TRANSICIONES_VALIDAS = {
     EstadoEnvioEnum.REGISTRADO:      [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.CANCELADO],
     EstadoEnvioEnum.EN_DEPOSITO:     [EstadoEnvioEnum.EN_TRANSITO, EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO],
     EstadoEnvioEnum.EN_TRANSITO:     [EstadoEnvioEnum.EN_SUCURSAL, EstadoEnvioEnum.RETRASADO],
-    EstadoEnvioEnum.EN_SUCURSAL:     [EstadoEnvioEnum.EN_DISTRIBUCION, EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO],
+    EstadoEnvioEnum.EN_SUCURSAL:     [EstadoEnvioEnum.EN_DISTRIBUCION, EstadoEnvioEnum.RETRASADO,
+                                      EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO],
     EstadoEnvioEnum.EN_DISTRIBUCION: [EstadoEnvioEnum.ENTREGADO, EstadoEnvioEnum.RETRASADO],
     EstadoEnvioEnum.ENTREGADO:       [],
-    EstadoEnvioEnum.RETRASADO:       [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.EN_TRANSITO, EstadoEnvioEnum.EN_SUCURSAL, EstadoEnvioEnum.EN_DISTRIBUCION],
+    EstadoEnvioEnum.RETRASADO:       [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.EN_TRANSITO,
+                                      EstadoEnvioEnum.EN_SUCURSAL, EstadoEnvioEnum.EN_DISTRIBUCION],
     EstadoEnvioEnum.BLOQUEADO:       [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.EN_SUCURSAL],
     EstadoEnvioEnum.CANCELADO:       [],
     EstadoEnvioEnum.ELIMINADO:       [],
@@ -362,6 +367,7 @@ def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Se
     db.commit()
     db.refresh(envio)
     return envio
+
 
 def _resolver_ubicacion(payload_nueva, payload_reusar, envio, db):
     """
