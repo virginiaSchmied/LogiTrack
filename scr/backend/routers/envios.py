@@ -1,5 +1,8 @@
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
@@ -88,10 +91,12 @@ def crear_envio(payload: EnvioCreate, db: Session = Depends(get_db)):
     # LP-118: predecir prioridad con el modelo ML si se provee probabilidad_retraso
     prioridad = None
     if payload.probabilidad_retraso is not None:
-        dias = max(0, (payload.fecha_entrega_estimada - date.today()).days)
-        resultado = predecir_prioridad(payload.probabilidad_retraso, dias)
-        if resultado:
+        dias = (payload.fecha_entrega_estimada - date.today()).days
+        try:
+            resultado = predecir_prioridad(payload.probabilidad_retraso, dias)
             prioridad = NivelPrioridadEnum(resultado)
+        except (ValueError, RuntimeError) as e:
+            logger.warning("No se pudo predecir la prioridad: %s", e)
 
     envio = Envio(
         uuid=uuid.uuid4(),

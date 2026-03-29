@@ -152,3 +152,62 @@ def test_cp0097_no_existe_endpoint_para_editar_tracking_id(client):
     tid = r.json()["tracking_id"]
     assert client.patch(f"/envios/{tid}", json={"tracking_id": "LT-99"}).status_code in (404, 405)
     assert client.put(f"/envios/{tid}", json={"tracking_id": "LT-99"}).status_code in (404, 405)
+
+
+# ── LP-118 — Persistencia de prioridad ───────────────────────────────────────
+
+_PAYLOAD_CON_PROB = {
+    **PAYLOAD_VALIDO,
+    "probabilidad_retraso": 0.85,
+}
+
+_PRIORIDADES_VALIDAS = {"ALTA", "MEDIA", "BAJA"}
+
+
+def test_cp0150_prioridad_persistida_al_crear_con_prob_retraso(client):
+    """CP-0150 (HP) — CA-1: POST con probabilidad_retraso → prioridad asignada automáticamente en la respuesta."""
+    resp = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    assert resp.status_code == 201
+    assert resp.json()["prioridad"] in _PRIORIDADES_VALIDAS
+
+
+def test_cp0151_probabilidad_invalida_retorna_422_sin_crear_envio(client):
+    """CP-0151 (UP) — CA-1: probabilidad_retraso fuera de rango → 422, envío no creado."""
+    payload = {**PAYLOAD_VALIDO, "probabilidad_retraso": 1.5}
+    resp = client.post("/envios/", json=payload)
+    assert resp.status_code == 422
+    assert client.get("/envios/").json()["total"] == 0
+
+
+def test_cp0152_prioridad_en_respuesta_pertenece_a_valores_validos(client):
+    """CP-0152 (HP) — CA-3: El valor de prioridad persistido siempre pertenece a {ALTA, MEDIA, BAJA}."""
+    resp = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    assert resp.status_code == 201
+    assert resp.json()["prioridad"] in _PRIORIDADES_VALIDAS
+
+
+def test_cp0153_prioridad_no_es_editable_manualmente(client):
+    """CP-0153 (HP) — CA-4: No existe endpoint para editar la prioridad manualmente."""
+    r = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    tid = r.json()["tracking_id"]
+    assert client.patch(f"/envios/{tid}", json={"prioridad": "BAJA"}).status_code in (404, 405)
+    assert client.put(f"/envios/{tid}", json={"prioridad": "BAJA"}).status_code in (404, 405)
+
+
+def test_cp0150_sin_prob_retraso_prioridad_es_nula(client):
+    """CP-0150 / CP-158 (HP) — CA-7: POST sin probabilidad_retraso → prioridad null en respuesta."""
+    resp = client.post("/envios/", json=PAYLOAD_VALIDO)
+    assert resp.status_code == 201
+    assert resp.json()["prioridad"] is None
+
+
+# ── LP-117 — Edge Case ────────────────────────────────────────────────────────
+
+def test_cp0313_payload_vacio_devuelve_422_con_detalle(client):
+    """CP-0313 — Edge Case: POST con payload vacío retorna 422 con detalle de los campos faltantes."""
+    res = client.post("/envios/", json={})
+    assert res.status_code == 422
+    campos_error = [e["loc"][-1] for e in res.json()["detail"]]
+    for campo in ("remitente", "destinatario", "fecha_entrega_estimada",
+                  "direccion_origen", "direccion_destino"):
+        assert campo in campos_error

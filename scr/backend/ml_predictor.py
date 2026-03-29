@@ -46,15 +46,41 @@ def predecir_prioridad(probabilidad_retraso: float, dias_para_entrega: int) -> O
     Predice la prioridad de un envío.
 
     Args:
-        probabilidad_retraso: float entre 0 y 1
-        dias_para_entrega:    días hasta la fecha estimada de entrega (mínimo 0)
+        probabilidad_retraso: float entre 0.0 y 1.0
+        dias_para_entrega:    int >= 0, días hasta la fecha estimada de entrega
 
     Returns:
         "ALTA", "MEDIA" o "BAJA", o None si el modelo no está disponible.
-    """
-    if _modelo is None:
-        return None
 
-    dias = max(0, dias_para_entrega)
-    X = np.array([[probabilidad_retraso, dias]])
+    Raises:
+        ValueError: si alguna feature es inválida o está fuera de rango.
+    """
+    if not isinstance(probabilidad_retraso, (int, float)):
+        raise ValueError(
+            f"'probabilidad_retraso' debe ser un número (float), "
+            f"se recibió {type(probabilidad_retraso).__name__}."
+        )
+    if not (0.0 <= float(probabilidad_retraso) <= 1.0):
+        raise ValueError(
+            f"'probabilidad_retraso' debe estar entre 0.0 y 1.0, "
+            f"se recibió {probabilidad_retraso}."
+        )
+    if not isinstance(dias_para_entrega, (int, float)):
+        raise ValueError(
+            f"'dias_para_entrega' debe ser un número entero, "
+            f"se recibió {type(dias_para_entrega).__name__}."
+        )
+    if int(dias_para_entrega) < 0:
+        raise ValueError(
+            f"'dias_para_entrega' debe ser >= 0, "
+            f"se recibió {dias_para_entrega}."
+        )
+
+    if _modelo is None:
+        raise RuntimeError(
+            "El modelo ML no está disponible. "
+            "Ejecutá ml/train.py para generarlo."
+        )
+
+    X = np.array([[float(probabilidad_retraso), int(dias_para_entrega)]])
     return str(_modelo.predict(X)[0])

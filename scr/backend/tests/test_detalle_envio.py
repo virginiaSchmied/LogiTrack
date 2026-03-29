@@ -111,3 +111,27 @@ def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client):
     assert resp.json()["total"] == 2
 
 
+# ── LP-118 — Prioridad visible en detalle ────────────────────────────────────
+
+_PAYLOAD_CON_PROB = {**PAYLOAD_VALIDO, "probabilidad_retraso": 0.85}
+
+
+def test_cp0154_prioridad_visible_en_detalle_del_envio(client):
+    """CP-0154 (HP) — CA-5: La prioridad clasificada es visible en el detalle del envío."""
+    r = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    tid = r.json()["tracking_id"]
+    resp = client.get(f"/envios/{tid}")
+    assert resp.status_code == 200
+    assert "prioridad" in resp.json()
+    assert resp.json()["prioridad"] in {"ALTA", "MEDIA", "BAJA"}
+
+
+def test_cp0158_sin_prob_retraso_detalle_muestra_prioridad_nula(client):
+    """CP-0158 (HP) — CA-6: Envío sin probabilidad_retraso → prioridad null en el detalle."""
+    r = client.post("/envios/", json=PAYLOAD_VALIDO)
+    tid = r.json()["tracking_id"]
+    resp = client.get(f"/envios/{tid}")
+    assert resp.status_code == 200
+    assert resp.json()["prioridad"] is None
+
+
