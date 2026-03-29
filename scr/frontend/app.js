@@ -181,6 +181,8 @@ function formatDatetime(iso) {
 }
 
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
+let _envioDetalle = null;
+
 async function openDetalle(trackingId) {
   const overlay  = document.getElementById('modal-overlay');
   const body     = document.getElementById('modal-body');
@@ -191,6 +193,7 @@ async function openDetalle(trackingId) {
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
   document.getElementById('btn-eliminar').style.display = 'none';
+  document.getElementById('btn-editar').style.display   = 'none';
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
@@ -198,13 +201,17 @@ async function openDetalle(trackingId) {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
     if (!res.ok) throw new Error(`Error ${res.status}`);
     const e = await res.json();
+    _envioDetalle = e;
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
 
     const btnEliminar = document.getElementById('btn-eliminar');
+    const btnEditar   = document.getElementById('btn-editar');
     if (e.estado !== 'ELIMINADO') {
       btnEliminar.style.display = '';
       btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+      btnEditar.style.display = '';
+      btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
     }
 
     body.innerHTML = `
@@ -259,7 +266,9 @@ async function openDetalle(trackingId) {
 function closeDetalle() {
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('btn-eliminar').style.display  = 'none';
+  document.getElementById('btn-editar').style.display    = 'none';
   document.body.style.overflow = '';
+  _envioDetalle = null;
 }
 
 // ─── Eliminación de envío ─────────────────────────────────────────────────────
@@ -294,6 +303,211 @@ async function confirmarEliminacion() {
   } catch (err) {
     console.error('Error al eliminar envío:', err);
     alert('No se pudo eliminar el envío. Verificá que el backend esté corriendo.');
+  }
+}
+
+// ─── Edición de envío ─────────────────────────────────────────────────────────
+let _trackingIdEnEdicion = null;
+
+function openEdit(trackingId, envio) {
+  _trackingIdEnEdicion = trackingId;
+  document.getElementById('edit-modal-tracking-id').textContent = trackingId;
+
+  // Pre-fill contacto
+  document.getElementById('edit-destinatario').value      = envio.destinatario;
+  document.getElementById('edit-destino-calle').value     = envio.direccion_destino.calle;
+  document.getElementById('edit-destino-numero').value    = envio.direccion_destino.numero;
+  document.getElementById('edit-destino-cp').value        = envio.direccion_destino.codigo_postal;
+  document.getElementById('edit-destino-ciudad').value    = envio.direccion_destino.ciudad;
+  document.getElementById('edit-destino-provincia').value = envio.direccion_destino.provincia;
+
+  // Pre-fill operativo
+  document.getElementById('edit-fecha-entrega').value = envio.fecha_entrega_estimada;
+  document.getElementById('edit-prob-retraso').value  = envio.probabilidad_retraso ?? '';
+
+  switchEditTab('contacto');
+  _clearEditErrors();
+
+  document.getElementById('edit-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEdit() {
+  document.getElementById('edit-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  _trackingIdEnEdicion = null;
+}
+
+function switchEditTab(tab) {
+  ['contacto', 'operativo'].forEach(t => {
+    document.getElementById(`edit-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`edit-panel-${t}`).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function _clearEditErrors() {
+  const ids = [
+    'edit-destinatario', 'edit-destino-calle', 'edit-destino-numero',
+    'edit-destino-cp', 'edit-destino-ciudad', 'edit-destino-provincia',
+    'edit-fecha-entrega', 'edit-prob-retraso',
+  ];
+  ids.forEach(id => {
+    const input = document.getElementById(id);
+    const error = document.getElementById('err-' + id);
+    if (input) input.setAttribute('aria-invalid', 'false');
+    if (error) error.classList.remove('visible');
+  });
+}
+
+function _setEditFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  input.setAttribute('aria-invalid', 'true');
+  error.textContent = msg;
+  error.classList.add('visible');
+}
+
+function _clearEditField(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+async function submitEditContacto() {
+  const checks = [
+    ['edit-destinatario',    validateText,        'nombre del destinatario'],
+    ['edit-destino-calle',   validateCalle,       'calle de destino'],
+    ['edit-destino-numero',  validateNumero,      'número de destino'],
+    ['edit-destino-cp',      validateCP,          'código postal de destino'],
+    ['edit-destino-ciudad',  validateTextoSimple, 'ciudad de destino'],
+    ['edit-destino-provincia', validateTextoSimple, 'provincia de destino'],
+  ];
+
+  let valid = true;
+  let firstInvalid = null;
+  for (const [id, fn, label] of checks) {
+    const input = document.getElementById(id);
+    const msg = fn(input.value, label);
+    if (msg) {
+      _setEditFieldError(id, msg);
+      if (valid) firstInvalid = id;
+      valid = false;
+    } else {
+      _clearEditField(id);
+    }
+  }
+  if (!valid) { document.getElementById(firstInvalid).focus(); return; }
+
+  const payload = {
+    destinatario: document.getElementById('edit-destinatario').value.trim(),
+    direccion_destino: {
+      calle:         document.getElementById('edit-destino-calle').value.trim(),
+      numero:        document.getElementById('edit-destino-numero').value.trim(),
+      ciudad:        document.getElementById('edit-destino-ciudad').value.trim(),
+      provincia:     document.getElementById('edit-destino-provincia').value.trim(),
+      codigo_postal: document.getElementById('edit-destino-cp').value.trim(),
+    },
+  };
+
+  const btn = document.getElementById('btn-guardar-contacto');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/contacto`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      if (Array.isArray(err.detail)) {
+        const fieldMap = {
+          destinatario: 'edit-destinatario', calle: 'edit-destino-calle',
+          numero: 'edit-destino-numero', codigo_postal: 'edit-destino-cp',
+          ciudad: 'edit-destino-ciudad', provincia: 'edit-destino-provincia',
+        };
+        err.detail.forEach(d => {
+          const id = fieldMap[d.loc?.[d.loc.length - 1]];
+          if (id) _setEditFieldError(id, d.msg);
+        });
+      }
+      return;
+    }
+    const tid = _trackingIdEnEdicion;
+    closeEdit();
+    showToast(tid, 'Datos de contacto actualizados');
+    cargarEnvios(currentQuery, currentPage);
+  } catch (err) {
+    console.error('Error al actualizar contacto:', err);
+    alert('No se pudo actualizar el envío. Verificá que el backend esté corriendo.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
+  }
+}
+
+async function submitEditOperativo() {
+  const fechaInput = document.getElementById('edit-fecha-entrega');
+  const fechaMsg = validateFecha(fechaInput.value, 'fecha estimada de entrega');
+  if (fechaMsg) {
+    _setEditFieldError('edit-fecha-entrega', fechaMsg);
+    fechaInput.focus();
+    return;
+  }
+  _clearEditField('edit-fecha-entrega');
+
+  const probVal = document.getElementById('edit-prob-retraso').value.trim();
+  const probNum = probVal !== '' ? parseFloat(probVal) : null;
+  if (probNum === null || isNaN(probNum)) {
+    _setEditFieldError('edit-prob-retraso', 'Ingresá la probabilidad de retraso.');
+    document.getElementById('edit-prob-retraso').focus();
+    return;
+  }
+  if (probNum < 0 || probNum > 1) {
+    _setEditFieldError('edit-prob-retraso', 'La probabilidad debe ser un número entre 0 y 1.');
+    document.getElementById('edit-prob-retraso').focus();
+    return;
+  }
+  _clearEditField('edit-prob-retraso');
+
+  const payload = {
+    fecha_entrega_estimada: fechaInput.value,
+    probabilidad_retraso:   probNum,
+  };
+
+  const btn = document.getElementById('btn-guardar-operativo');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/operativo`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      if (Array.isArray(err.detail)) {
+        err.detail.forEach(d => {
+          if (d.loc?.[d.loc.length - 1] === 'fecha_entrega_estimada') {
+            _setEditFieldError('edit-fecha-entrega', d.msg);
+          }
+        });
+      }
+      return;
+    }
+    const tid = _trackingIdEnEdicion;
+    closeEdit();
+    showToast(tid, 'Datos operativos actualizados');
+    cargarEnvios(currentQuery, currentPage);
+  } catch (err) {
+    console.error('Error al actualizar operativo:', err);
+    alert('No se pudo actualizar el envío. Verificá que el backend esté corriendo.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
   }
 }
 
@@ -417,14 +631,23 @@ async function submitForm() {
 
   const probVal = document.getElementById('prob-retraso').value.trim();
   const probNum = probVal !== '' ? parseFloat(probVal) : null;
-  if (probNum !== null && (isNaN(probNum) || probNum < 0 || probNum > 1)) {
-    const errEl = document.getElementById('err-prob-retraso');
-    errEl.textContent = 'La probabilidad debe ser un número entre 0 y 1.';
-    errEl.classList.add('visible');
+  const errProb = document.getElementById('err-prob-retraso');
+  if (probNum === null || isNaN(probNum)) {
+    errProb.textContent = 'Ingresá la probabilidad de retraso.';
+    errProb.classList.add('visible');
     document.getElementById('prob-retraso').setAttribute('aria-invalid', 'true');
     document.getElementById('prob-retraso').focus();
     return;
   }
+  if (probNum < 0 || probNum > 1) {
+    errProb.textContent = 'La probabilidad debe ser un número entre 0 y 1.';
+    errProb.classList.add('visible');
+    document.getElementById('prob-retraso').setAttribute('aria-invalid', 'true');
+    document.getElementById('prob-retraso').focus();
+    return;
+  }
+  errProb.classList.remove('visible');
+  document.getElementById('prob-retraso').setAttribute('aria-invalid', 'false');
 
   const payload = {
     remitente:              document.getElementById('remitente').value.trim(),
@@ -538,6 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      closeEdit();
       closeConfirmDelete();
       closeDetalle();
     }

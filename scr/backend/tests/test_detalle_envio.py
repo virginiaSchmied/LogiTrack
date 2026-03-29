@@ -20,6 +20,7 @@ _FECHA_FUTURA = str(date.today() + timedelta(days=30))
 PAYLOAD_VALIDO = {
     "remitente": "Juan Pérez",
     "destinatario": "María García",
+    "probabilidad_retraso": 0.5,
     "fecha_entrega_estimada": _FECHA_FUTURA,
     "direccion_origen": {
         "calle": "Av. Corrientes",
@@ -126,12 +127,5 @@ def test_cp0154_prioridad_visible_en_detalle_del_envio(client):
     assert resp.json()["prioridad"] in {"ALTA", "MEDIA", "BAJA"}
 
 
-def test_cp0158_sin_prob_retraso_detalle_muestra_prioridad_nula(client):
-    """CP-0158 (HP) — CA-6: Envío sin probabilidad_retraso → prioridad null en el detalle."""
-    r = client.post("/envios/", json=PAYLOAD_VALIDO)
-    tid = r.json()["tracking_id"]
-    resp = client.get(f"/envios/{tid}")
-    assert resp.status_code == 200
-    assert resp.json()["prioridad"] is None
 
 

@@ -20,6 +20,7 @@ _FECHA_FUTURA = str(date.today() + timedelta(days=30))
 PAYLOAD_VALIDO = {
     "remitente": "Juan Pérez",
     "destinatario": "María García",
+    "probabilidad_retraso": 0.5,
     "fecha_entrega_estimada": _FECHA_FUTURA,
     "direccion_origen": {
         "calle": "Av. Corrientes",
@@ -194,13 +195,6 @@ def test_cp0153_prioridad_no_es_editable_manualmente(client):
     assert client.put(f"/envios/{tid}", json={"prioridad": "BAJA"}).status_code in (404, 405)
 
 
-def test_cp0150_sin_prob_retraso_prioridad_es_nula(client):
-    """CP-0150 / CP-158 (HP) — CA-7: POST sin probabilidad_retraso → prioridad null en respuesta."""
-    resp = client.post("/envios/", json=PAYLOAD_VALIDO)
-    assert resp.status_code == 201
-    assert resp.json()["prioridad"] is None
-
-
 # ── LP-117 — Edge Case ────────────────────────────────────────────────────────
 
 def test_cp0313_payload_vacio_devuelve_422_con_detalle(client):
@@ -208,6 +202,6 @@ def test_cp0313_payload_vacio_devuelve_422_con_detalle(client):
     res = client.post("/envios/", json={})
     assert res.status_code == 422
     campos_error = [e["loc"][-1] for e in res.json()["detail"]]
-    for campo in ("remitente", "destinatario", "fecha_entrega_estimada",
-                  "direccion_origen", "direccion_destino"):
+    for campo in ("remitente", "destinatario", "probabilidad_retraso",
+                  "fecha_entrega_estimada", "direccion_origen", "direccion_destino"):
         assert campo in campos_error

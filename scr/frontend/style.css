@@ -190,6 +190,16 @@ body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;font-s
 .dl-row dt{font-weight:700;color:var(--text-sub);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;flex-shrink:0;min-width:120px}
 .dl-row dd{margin:0;color:var(--text)}
 
+/* EDIT MODAL TABS */
+.edit-tabs-bar{display:flex;border-bottom:1px solid var(--border);padding:0 1.5rem;gap:0}
+.edit-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text-sub);font-family:'Syne',sans-serif;font-size:.82rem;font-weight:600;padding:.7rem 1.1rem;cursor:pointer;transition:all .15s;letter-spacing:.01em;margin-bottom:-1px}
+.edit-tab:hover{color:var(--text);background:var(--surface2)}
+.edit-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.edit-tab:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+/* MODAL FOOTER */
+.modal-footer{display:flex;gap:.75rem;justify-content:flex-end;padding:1rem 1.5rem;border-top:1px solid var(--border);flex-wrap:wrap}
+
 @media(max-width:560px){
   .detail-cols{grid-template-columns:1fr}
   .modal-body{padding:1.25rem 1rem}
