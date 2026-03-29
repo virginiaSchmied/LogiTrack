@@ -64,33 +64,64 @@ function showView(viewName) {
   if (viewName === 'form') resetForm();
   if (viewName === 'list') {
     document.getElementById('search-input').value = '';
-    cargarEnvios();
+    cargarEnvios('', 1);
   }
 }
 
+// ─── Paginación ───────────────────────────────────────────────────────────────
+const PAGE_SIZE   = 20;
+let currentPage   = 1;
+let currentQuery  = '';
+let totalEnvios   = 0;
+
+function renderPaginacion(total, page) {
+  const pag        = document.getElementById('paginacion');
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) { pag.style.display = 'none'; return; }
+  pag.style.display = 'flex';
+  document.getElementById('pag-info').textContent         = `Página ${page} de ${totalPages}`;
+  document.getElementById('btn-anterior').disabled        = page <= 1;
+  document.getElementById('btn-siguiente').disabled       = page >= totalPages;
+}
+
+function paginaAnterior() {
+  if (currentPage > 1) cargarEnvios(currentQuery, currentPage - 1);
+}
+
+function paginaSiguiente() {
+  if (currentPage < Math.ceil(totalEnvios / PAGE_SIZE)) cargarEnvios(currentQuery, currentPage + 1);
+}
+
 // ─── Carga de envíos desde la API ─────────────────────────────────────────────
-async function cargarEnvios(q = '') {
+async function cargarEnvios(q = '', page = 1) {
+  currentQuery = q;
+  currentPage  = page;
+
   const tbody = document.getElementById('table-body');
   const table = document.getElementById('envios-table');
   const empty = document.getElementById('empty-state');
   const noRes = document.getElementById('no-results');
   const chip  = document.getElementById('count-chip');
+  const pag   = document.getElementById('paginacion');
 
   try {
-    const url = q.trim()
-      ? `${API_BASE}/envios?q=${encodeURIComponent(q.trim())}`
-      : `${API_BASE}/envios`;
+    const skip   = (page - 1) * PAGE_SIZE;
+    const params = new URLSearchParams({ skip, limit: PAGE_SIZE });
+    if (q.trim()) params.set('q', q.trim());
+    const url = `${API_BASE}/envios?${params}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Error ${res.status}`);
 
-    const data = await res.json();
+    const data  = await res.json();
     const envios = data.items;
+    totalEnvios  = data.total;
 
     chip.textContent = data.total;
 
     if (data.total === 0 && !q.trim()) {
       table.style.display = 'none';
+      pag.style.display   = 'none';
       empty.style.display = '';
       noRes.style.display = 'none';
       empty.querySelector('.e-title').textContent = 'No hay envíos registrados';
@@ -100,6 +131,7 @@ async function cargarEnvios(q = '') {
 
     if (envios.length === 0) {
       table.style.display = 'none';
+      pag.style.display   = 'none';
       empty.style.display = 'none';
       noRes.style.display = '';
       return;
@@ -122,10 +154,13 @@ async function cargarEnvios(q = '') {
       </tr>
     `).join('');
 
+    renderPaginacion(data.total, page);
+
   } catch (err) {
     console.error('Error al cargar envíos:', err);
     chip.textContent = '—';
     table.style.display = 'none';
+    pag.style.display   = 'none';
     noRes.style.display = 'none';
     empty.style.display = '';
     empty.querySelector('.e-title').textContent = 'Error al conectar con el servidor';
@@ -450,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(
-      () => cargarEnvios(document.getElementById('search-input').value),
+      () => cargarEnvios(document.getElementById('search-input').value, 1),
       300
     );
   });

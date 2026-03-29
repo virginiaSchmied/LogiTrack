@@ -133,6 +133,11 @@ body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;font-s
 .badge-prioridad-baja  {background:#d1fae5;color:#065f46;border:1px solid #a7f3d0}
 .badge-prioridad-null  {background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0}
 
+/* PAGINACIÓN */
+.paginacion{display:flex;align-items:center;justify-content:center;gap:1rem;padding-top:1.25rem;margin-top:1rem;border-top:1px solid var(--border)}
+.pag-info{font-size:.78rem;font-weight:600;color:var(--text-sub);font-family:'DM Mono',monospace}
+.btn-sm{padding:.4rem 1rem;font-size:.78rem}
+
 /* EMPTY STATE */
 .empty-state{text-align:center;padding:4rem 2rem;color:var(--text-sub)}
 .empty-state .e-icon{font-size:2.5rem;margin-bottom:.75rem;opacity:.7}

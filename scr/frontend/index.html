@@ -82,6 +82,12 @@
         </table>
       </div>
 
+      <nav class="paginacion" id="paginacion" style="display:none;" aria-label="Paginación de envíos">
+        <button class="btn btn-ghost btn-sm" id="btn-anterior" onclick="paginaAnterior()" aria-label="Página anterior">← Anterior</button>
+        <span class="pag-info" id="pag-info" aria-live="polite"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-siguiente" onclick="paginaSiguiente()" aria-label="Página siguiente">Siguiente →</button>
+      </nav>
+
       <div class="empty-state" id="no-results" style="display:none;" role="status" aria-live="polite">
         <div class="e-icon" aria-hidden="true">🔍</div>
         <div class="e-title">Sin resultados</div>
