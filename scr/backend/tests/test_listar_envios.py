@@ -17,6 +17,7 @@ _FECHA_FUTURA = str(date.today() + timedelta(days=30))
 PAYLOAD_VALIDO = {
     "remitente": "Juan Pérez",
     "destinatario": "María García",
+    "probabilidad_retraso": 0.5,
     "fecha_entrega_estimada": _FECHA_FUTURA,
     "direccion_origen": {
         "calle": "Av. Corrientes",

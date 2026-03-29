@@ -28,6 +28,26 @@ const BADGE_LABEL = {
   'ELIMINADO':       'Eliminado',
 };
 
+// ─── Mapa de badges por prioridad ────────────────────────────────────────────
+const PRIORIDAD_BADGE_CLASS = {
+  'ALTA':  'badge-prioridad-alta',
+  'MEDIA': 'badge-prioridad-media',
+  'BAJA':  'badge-prioridad-baja',
+};
+
+const PRIORIDAD_BADGE_LABEL = {
+  'ALTA':  'Alta',
+  'MEDIA': 'Media',
+  'BAJA':  'Baja',
+};
+
+function prioridadBadge(prioridad) {
+  if (!prioridad) return `<span class="badge badge-prioridad-null">Sin clasificar</span>`;
+  const cls   = PRIORIDAD_BADGE_CLASS[prioridad] || 'badge-prioridad-null';
+  const label = PRIORIDAD_BADGE_LABEL[prioridad] || prioridad;
+  return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+}
+
 // ─── Navegación ───────────────────────────────────────────────────────────────
 function showView(viewName) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -44,33 +64,64 @@ function showView(viewName) {
   if (viewName === 'form') resetForm();
   if (viewName === 'list') {
     document.getElementById('search-input').value = '';
-    cargarEnvios();
+    cargarEnvios('', 1);
   }
 }
 
+// ─── Paginación ───────────────────────────────────────────────────────────────
+const PAGE_SIZE   = 20;
+let currentPage   = 1;
+let currentQuery  = '';
+let totalEnvios   = 0;
+
+function renderPaginacion(total, page) {
+  const pag        = document.getElementById('paginacion');
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) { pag.style.display = 'none'; return; }
+  pag.style.display = 'flex';
+  document.getElementById('pag-info').textContent         = `Página ${page} de ${totalPages}`;
+  document.getElementById('btn-anterior').disabled        = page <= 1;
+  document.getElementById('btn-siguiente').disabled       = page >= totalPages;
+}
+
+function paginaAnterior() {
+  if (currentPage > 1) cargarEnvios(currentQuery, currentPage - 1);
+}
+
+function paginaSiguiente() {
+  if (currentPage < Math.ceil(totalEnvios / PAGE_SIZE)) cargarEnvios(currentQuery, currentPage + 1);
+}
+
 // ─── Carga de envíos desde la API ─────────────────────────────────────────────
-async function cargarEnvios(q = '') {
+async function cargarEnvios(q = '', page = 1) {
+  currentQuery = q;
+  currentPage  = page;
+
   const tbody = document.getElementById('table-body');
   const table = document.getElementById('envios-table');
   const empty = document.getElementById('empty-state');
   const noRes = document.getElementById('no-results');
   const chip  = document.getElementById('count-chip');
+  const pag   = document.getElementById('paginacion');
 
   try {
-    const url = q.trim()
-      ? `${API_BASE}/envios?q=${encodeURIComponent(q.trim())}`
-      : `${API_BASE}/envios`;
+    const skip   = (page - 1) * PAGE_SIZE;
+    const params = new URLSearchParams({ skip, limit: PAGE_SIZE });
+    if (q.trim()) params.set('q', q.trim());
+    const url = `${API_BASE}/envios?${params}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Error ${res.status}`);
 
-    const data = await res.json();
+    const data  = await res.json();
     const envios = data.items;
+    totalEnvios  = data.total;
 
     chip.textContent = data.total;
 
     if (data.total === 0 && !q.trim()) {
       table.style.display = 'none';
+      pag.style.display   = 'none';
       empty.style.display = '';
       noRes.style.display = 'none';
       empty.querySelector('.e-title').textContent = 'No hay envíos registrados';
@@ -80,6 +131,7 @@ async function cargarEnvios(q = '') {
 
     if (envios.length === 0) {
       table.style.display = 'none';
+      pag.style.display   = 'none';
       empty.style.display = 'none';
       noRes.style.display = '';
       return;
@@ -97,14 +149,18 @@ async function cargarEnvios(q = '') {
         <td data-label="Ciudad Origen" class="sub-text">${escHtml(e.ciudad_origen)}, ${escHtml(e.provincia_origen)}</td>
         <td data-label="Ciudad Destino" class="sub-text">${escHtml(e.ciudad_destino)}, ${escHtml(e.provincia_destino)}</td>
         <td data-label="Estado"><span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span></td>
+        <td data-label="Prioridad">${prioridadBadge(e.prioridad)}</td>
         <td data-label="Entrega estimada" class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</td>
       </tr>
     `).join('');
+
+    renderPaginacion(data.total, page);
 
   } catch (err) {
     console.error('Error al cargar envíos:', err);
     chip.textContent = '—';
     table.style.display = 'none';
+    pag.style.display   = 'none';
     noRes.style.display = 'none';
     empty.style.display = '';
     empty.querySelector('.e-title').textContent = 'Error al conectar con el servidor';
@@ -125,6 +181,8 @@ function formatDatetime(iso) {
 }
 
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
+let _envioDetalle = null;
+
 async function openDetalle(trackingId) {
   const overlay  = document.getElementById('modal-overlay');
   const body     = document.getElementById('modal-body');
@@ -134,6 +192,8 @@ async function openDetalle(trackingId) {
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
+  document.getElementById('btn-eliminar').style.display = 'none';
+  document.getElementById('btn-editar').style.display   = 'none';
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
@@ -141,8 +201,18 @@ async function openDetalle(trackingId) {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
     if (!res.ok) throw new Error(`Error ${res.status}`);
     const e = await res.json();
+    _envioDetalle = e;
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
+
+    const btnEliminar = document.getElementById('btn-eliminar');
+    const btnEditar   = document.getElementById('btn-editar');
+    if (e.estado !== 'ELIMINADO') {
+      btnEliminar.style.display = '';
+      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+      btnEditar.style.display = '';
+      btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
+    }
 
     body.innerHTML = `
       <div class="detail-grid">
@@ -152,7 +222,7 @@ async function openDetalle(trackingId) {
           <dl class="detail-list">
             <div class="dl-row"><dt>Remitente</dt><dd>${escHtml(e.remitente)}</dd></div>
             <div class="dl-row"><dt>Destinatario</dt><dd>${escHtml(e.destinatario)}</dd></div>
-            <div class="dl-row"><dt>Prioridad</dt><dd>${e.prioridad ? escHtml(e.prioridad) : '<span class="sub-text">No asignada</span>'}</dd></div>
+            <div class="dl-row"><dt>Prioridad</dt><dd>${prioridadBadge(e.prioridad)}</dd></div>
             <div class="dl-row"><dt>Entrega estimada</dt><dd class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</dd></div>
             <div class="dl-row"><dt>Registrado</dt><dd class="mono-text">${escHtml(formatDatetime(e.created_at))}</dd></div>
             <div class="dl-row"><dt>Última actualización</dt><dd class="mono-text">${escHtml(formatDatetime(e.updated_at))}</dd></div>
@@ -195,7 +265,250 @@ async function openDetalle(trackingId) {
 
 function closeDetalle() {
   document.getElementById('modal-overlay').style.display = 'none';
+  document.getElementById('btn-eliminar').style.display  = 'none';
+  document.getElementById('btn-editar').style.display    = 'none';
   document.body.style.overflow = '';
+  _envioDetalle = null;
+}
+
+// ─── Eliminación de envío ─────────────────────────────────────────────────────
+let _envioAEliminar = null;
+
+function openConfirmDelete(trackingId, remitente, destinatario) {
+  _envioAEliminar = trackingId;
+  document.getElementById('confirm-tracking-id').textContent  = trackingId;
+  document.getElementById('confirm-remitente').textContent    = remitente;
+  document.getElementById('confirm-destinatario').textContent = destinatario;
+  document.getElementById('confirm-overlay').style.display    = 'flex';
+}
+
+function closeConfirmDelete() {
+  document.getElementById('confirm-overlay').style.display = 'none';
+  _envioAEliminar = null;
+}
+
+async function confirmarEliminacion() {
+  if (!_envioAEliminar) return;
+  const trackingId = _envioAEliminar;
+  closeConfirmDelete();
+  closeDetalle();
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    showToast(trackingId, 'Envío eliminado correctamente');
+    cargarEnvios(currentQuery, 1);
+  } catch (err) {
+    console.error('Error al eliminar envío:', err);
+    alert('No se pudo eliminar el envío. Verificá que el backend esté corriendo.');
+  }
+}
+
+// ─── Edición de envío ─────────────────────────────────────────────────────────
+let _trackingIdEnEdicion = null;
+
+function openEdit(trackingId, envio) {
+  _trackingIdEnEdicion = trackingId;
+  document.getElementById('edit-modal-tracking-id').textContent = trackingId;
+
+  // Pre-fill contacto
+  document.getElementById('edit-destinatario').value      = envio.destinatario;
+  document.getElementById('edit-destino-calle').value     = envio.direccion_destino.calle;
+  document.getElementById('edit-destino-numero').value    = envio.direccion_destino.numero;
+  document.getElementById('edit-destino-cp').value        = envio.direccion_destino.codigo_postal;
+  document.getElementById('edit-destino-ciudad').value    = envio.direccion_destino.ciudad;
+  document.getElementById('edit-destino-provincia').value = envio.direccion_destino.provincia;
+
+  // Pre-fill operativo
+  document.getElementById('edit-fecha-entrega').value = envio.fecha_entrega_estimada;
+  document.getElementById('edit-prob-retraso').value  = envio.probabilidad_retraso ?? '';
+
+  switchEditTab('contacto');
+  _clearEditErrors();
+
+  document.getElementById('edit-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEdit() {
+  document.getElementById('edit-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  _trackingIdEnEdicion = null;
+}
+
+function switchEditTab(tab) {
+  ['contacto', 'operativo'].forEach(t => {
+    document.getElementById(`edit-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`edit-panel-${t}`).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function _clearEditErrors() {
+  const ids = [
+    'edit-destinatario', 'edit-destino-calle', 'edit-destino-numero',
+    'edit-destino-cp', 'edit-destino-ciudad', 'edit-destino-provincia',
+    'edit-fecha-entrega', 'edit-prob-retraso',
+  ];
+  ids.forEach(id => {
+    const input = document.getElementById(id);
+    const error = document.getElementById('err-' + id);
+    if (input) input.setAttribute('aria-invalid', 'false');
+    if (error) error.classList.remove('visible');
+  });
+}
+
+function _setEditFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  input.setAttribute('aria-invalid', 'true');
+  error.textContent = msg;
+  error.classList.add('visible');
+}
+
+function _clearEditField(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+async function submitEditContacto() {
+  const checks = [
+    ['edit-destinatario',    validateText,        'nombre del destinatario'],
+    ['edit-destino-calle',   validateCalle,       'calle de destino'],
+    ['edit-destino-numero',  validateNumero,      'número de destino'],
+    ['edit-destino-cp',      validateCP,          'código postal de destino'],
+    ['edit-destino-ciudad',  validateTextoSimple, 'ciudad de destino'],
+    ['edit-destino-provincia', validateTextoSimple, 'provincia de destino'],
+  ];
+
+  let valid = true;
+  let firstInvalid = null;
+  for (const [id, fn, label] of checks) {
+    const input = document.getElementById(id);
+    const msg = fn(input.value, label);
+    if (msg) {
+      _setEditFieldError(id, msg);
+      if (valid) firstInvalid = id;
+      valid = false;
+    } else {
+      _clearEditField(id);
+    }
+  }
+  if (!valid) { document.getElementById(firstInvalid).focus(); return; }
+
+  const payload = {
+    destinatario: document.getElementById('edit-destinatario').value.trim(),
+    direccion_destino: {
+      calle:         document.getElementById('edit-destino-calle').value.trim(),
+      numero:        document.getElementById('edit-destino-numero').value.trim(),
+      ciudad:        document.getElementById('edit-destino-ciudad').value.trim(),
+      provincia:     document.getElementById('edit-destino-provincia').value.trim(),
+      codigo_postal: document.getElementById('edit-destino-cp').value.trim(),
+    },
+  };
+
+  const btn = document.getElementById('btn-guardar-contacto');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/contacto`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      if (Array.isArray(err.detail)) {
+        const fieldMap = {
+          destinatario: 'edit-destinatario', calle: 'edit-destino-calle',
+          numero: 'edit-destino-numero', codigo_postal: 'edit-destino-cp',
+          ciudad: 'edit-destino-ciudad', provincia: 'edit-destino-provincia',
+        };
+        err.detail.forEach(d => {
+          const id = fieldMap[d.loc?.[d.loc.length - 1]];
+          if (id) _setEditFieldError(id, d.msg);
+        });
+      }
+      return;
+    }
+    const tid = _trackingIdEnEdicion;
+    closeEdit();
+    showToast(tid, 'Datos de contacto actualizados');
+    cargarEnvios(currentQuery, currentPage);
+  } catch (err) {
+    console.error('Error al actualizar contacto:', err);
+    alert('No se pudo actualizar el envío. Verificá que el backend esté corriendo.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
+  }
+}
+
+async function submitEditOperativo() {
+  const fechaInput = document.getElementById('edit-fecha-entrega');
+  const fechaMsg = validateFecha(fechaInput.value, 'fecha estimada de entrega');
+  if (fechaMsg) {
+    _setEditFieldError('edit-fecha-entrega', fechaMsg);
+    fechaInput.focus();
+    return;
+  }
+  _clearEditField('edit-fecha-entrega');
+
+  const probVal = document.getElementById('edit-prob-retraso').value.trim();
+  const probNum = probVal !== '' ? parseFloat(probVal) : null;
+  if (probNum === null || isNaN(probNum)) {
+    _setEditFieldError('edit-prob-retraso', 'Ingresá la probabilidad de retraso.');
+    document.getElementById('edit-prob-retraso').focus();
+    return;
+  }
+  if (probNum < 0 || probNum > 1) {
+    _setEditFieldError('edit-prob-retraso', 'La probabilidad debe ser un número entre 0 y 1.');
+    document.getElementById('edit-prob-retraso').focus();
+    return;
+  }
+  _clearEditField('edit-prob-retraso');
+
+  const payload = {
+    fecha_entrega_estimada: fechaInput.value,
+    probabilidad_retraso:   probNum,
+  };
+
+  const btn = document.getElementById('btn-guardar-operativo');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/operativo`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      if (Array.isArray(err.detail)) {
+        err.detail.forEach(d => {
+          if (d.loc?.[d.loc.length - 1] === 'fecha_entrega_estimada') {
+            _setEditFieldError('edit-fecha-entrega', d.msg);
+          }
+        });
+      }
+      return;
+    }
+    const tid = _trackingIdEnEdicion;
+    closeEdit();
+    showToast(tid, 'Datos operativos actualizados');
+    cargarEnvios(currentQuery, currentPage);
+  } catch (err) {
+    console.error('Error al actualizar operativo:', err);
+    alert('No se pudo actualizar el envío. Verificá que el backend esté corriendo.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
+  }
 }
 
 // ─── Definición de campos y sus validaciones ──────────────────────────────────
@@ -316,9 +629,30 @@ async function submitForm() {
     return;
   }
 
+  const probVal = document.getElementById('prob-retraso').value.trim();
+  const probNum = probVal !== '' ? parseFloat(probVal) : null;
+  const errProb = document.getElementById('err-prob-retraso');
+  if (probNum === null || isNaN(probNum)) {
+    errProb.textContent = 'Ingresá la probabilidad de retraso.';
+    errProb.classList.add('visible');
+    document.getElementById('prob-retraso').setAttribute('aria-invalid', 'true');
+    document.getElementById('prob-retraso').focus();
+    return;
+  }
+  if (probNum < 0 || probNum > 1) {
+    errProb.textContent = 'La probabilidad debe ser un número entre 0 y 1.';
+    errProb.classList.add('visible');
+    document.getElementById('prob-retraso').setAttribute('aria-invalid', 'true');
+    document.getElementById('prob-retraso').focus();
+    return;
+  }
+  errProb.classList.remove('visible');
+  document.getElementById('prob-retraso').setAttribute('aria-invalid', 'false');
+
   const payload = {
     remitente:              document.getElementById('remitente').value.trim(),
     destinatario:           document.getElementById('destinatario').value.trim(),
+    probabilidad_retraso:   probNum,
     fecha_entrega_estimada: document.getElementById('fecha-entrega').value,
     direccion_origen: {
       calle:         document.getElementById('origen-calle').value.trim(),
@@ -384,13 +718,18 @@ function resetForm() {
     if (el) el.value = '';
     clearFieldError(id);
   });
+  const probEl = document.getElementById('prob-retraso');
+  if (probEl) probEl.value = '';
+  const errProb = document.getElementById('err-prob-retraso');
+  if (errProb) errProb.classList.remove('visible');
   document.getElementById('tracking-display').textContent = '(se asignará al registrar)';
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
-function showToast(tid) {
+function showToast(tid, titulo = 'Envío registrado correctamente') {
   const toast = document.getElementById('toast');
-  document.getElementById('toast-sub').textContent = tid;
+  document.getElementById('toast-title').textContent = titulo;
+  document.getElementById('toast-sub').textContent   = tid;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3500);
 }
@@ -413,7 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(
-      () => cargarEnvios(document.getElementById('search-input').value),
+      () => cargarEnvios(document.getElementById('search-input').value, 1),
       300
     );
   });
@@ -421,6 +760,10 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarEnvios();
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeDetalle();
+    if (e.key === 'Escape') {
+      closeEdit();
+      closeConfirmDelete();
+      closeDetalle();
+    }
   });
 });

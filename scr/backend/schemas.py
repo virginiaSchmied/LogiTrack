@@ -56,6 +56,7 @@ class EnvioCreate(BaseModel):
 
     remitente:              str = Field(..., min_length=1, max_length=255)
     destinatario:           str = Field(..., min_length=1, max_length=255)
+    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0)
     fecha_entrega_estimada: date
     direccion_origen:       DireccionCreate
     direccion_destino:      DireccionCreate
@@ -124,3 +125,27 @@ class EnvioOut(BaseModel):
 class EnvioListResponse(BaseModel):
     total: int
     items: list[EnvioListItem]
+
+
+# ── Edición de envío ──────────────────────────────────────────────────────────
+
+class EnvioUpdateContacto(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    destinatario:      str = Field(..., min_length=1, max_length=255)
+    direccion_destino: DireccionCreate
+
+
+class EnvioUpdateOperativo(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    fecha_entrega_estimada: date
+    probabilidad_retraso:   float = Field(..., ge=0.0, le=1.0)
+
+    @field_validator("fecha_entrega_estimada")
+    @classmethod
+    def fecha_no_puede_ser_pasada(cls, v: date) -> date:
+        from datetime import date as date_type
+        if v < date_type.today():
+            raise ValueError("La fecha estimada de entrega no puede ser anterior a hoy")
+        return v
