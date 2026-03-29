@@ -1,0 +1,64 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scr/backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install JavaScript dependencies
+        working-directory: ./scr/frontend
+        run: npm install
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Python code
+        run: |
+          pip install flake8
+          flake8 .
+
+      - name: Lint JavaScript code
+        working-directory: ./scr/frontend
+        run: |
+          npm install
+          npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Python tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scr/backend/requirements.txt
+          pip install pytest httpx
+          pytest scr/backend/tests/ -v
+
+      - name: Run JavaScript tests
+        working-directory: ./scr/frontend
+        run: |
+          npm install
+          npm test
