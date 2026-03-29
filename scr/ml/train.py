@@ -193,7 +193,7 @@ def comparar_modelos(X_train, X_test, y_train, y_test):
     return resultados
 
 
-# ── Selección y entrenamiento final (LP-115) ──────────────────────────────────
+# ── Selección del modelo final (LP-115) ───────────────────────────────────────
 
 def seleccionar_y_entrenar(resultados, X, y):
     mejor_nombre = max(resultados, key=lambda n: resultados[n]["f1_macro"])
@@ -207,14 +207,11 @@ def seleccionar_y_entrenar(resultados, X, y):
         print(f"  {nombre:20s}  accuracy={info['accuracy']:.4f}  f1_macro={info['f1_macro']:.4f}{marca}")
 
     print(f"\nMotivo: mayor F1-score macro promedio entre las 3 clases.")
+    print(f"El modelo guardado es el mismo evaluado sobre el 20% de test (métricas honestas).")
 
-    # Reentrenar sobre el dataset completo
-    clase = type(mejor_info["modelo"])
-    kwargs = {"random_state": RANDOM_STATE} if hasattr(clase(), "random_state") else {}
-    modelo_final = clase(**{**mejor_info["modelo"].get_params(), **kwargs})
-    modelo_final.fit(X, y)
-
-    return mejor_nombre, modelo_final
+    # Se usa el modelo ya entrenado en el 80% — las métricas reportadas corresponden
+    # exactamente a este modelo, por lo que no se reentrena sobre el dataset completo.
+    return mejor_nombre, mejor_info["modelo"]
 
 
 # ── Exportar modelo (LP-116) ──────────────────────────────────────────────────
@@ -248,8 +245,8 @@ def main():
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
 
-    resultados   = comparar_modelos(X_train, X_test, y_train, y_test)
-    nombre, modelo = seleccionar_y_entrenar(resultados, X, y)
+    resultados     = comparar_modelos(X_train, X_test, y_train, y_test)
+    nombre, modelo = seleccionar_y_entrenar(resultados, X_train, y_train)
     exportar(modelo, nombre)
 
 
