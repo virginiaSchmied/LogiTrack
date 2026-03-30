@@ -1,38 +1,30 @@
 """
-Entrenamiento y comparación de modelos de clasificación de prioridad de envíos.
+Entrenamiento del modelo de clasificación de prioridad de envíos.
 
-Cubre LP-114 (comparación de algoritmos) y LP-115 (entrenamiento + métricas).
+Cubre LP-115 (entrenamiento) y LP-116 (exportación del modelo).
 
-Features:
-    - probabilidad_retraso (float 0-1)
-    - dias_para_entrega    (int)
-
-Target:
-    - prioridad: ALTA / MEDIA / BAJA
+Algoritmo: Decision Tree (seleccionado en LP-114 por mayor F1-score macro).
+Semilla fija (RANDOM_STATE=42) para resultados reproducibles (CP-0144).
 
 Uso:
     python3 ml/train.py
-    # → imprime métricas comparativas
+    # → entrena Decision Tree sobre el 80% del dataset
     # → exporta ml/modelo_prioridad.joblib
+    # → valida el modelo contra los 9 cuadrantes de la matriz de prioridad
 """
 
 import csv
+from datetime import datetime
 from pathlib import Path
 
 import joblib
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")  # sin ventana gráfica
-import matplotlib.pyplot as plt
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
 
-DATASET_PATH  = Path(__file__).parent / "dataset" / "dataset_aumentado.csv"
-MODEL_PATH    = Path(__file__).parent / "modelo_prioridad.joblib"
-REPORTES_DIR  = Path(__file__).parent / "reportes"
+DATASET_PATH = Path(__file__).parent / "dataset" / "dataset_aumentado.csv"
+MODEL_PATH   = Path(__file__).parent / "modelo_prioridad.joblib"
 
 RANDOM_STATE = 42
 
@@ -48,182 +40,36 @@ def cargar_dataset(path: Path):
     return np.array(X), np.array(y)
 
 
-# ── Helpers de visualización ──────────────────────────────────────────────────
+# ── Entrenamiento (LP-115) ────────────────────────────────────────────────────
 
-def guardar_tabla_reporte(nombre: str, reporte_dict: dict, y_test, y_pred):
-    """Guarda el classification report como imagen PNG."""
-    clases = ["ALTA", "MEDIA", "BAJA"]
-    cols   = ["precision", "recall", "f1-score", "support"]
+def entrenar(X_train, X_test, y_train, y_test):
+    modelo = DecisionTreeClassifier(random_state=RANDOM_STATE)
+    modelo.fit(X_train, y_train)
 
-    filas       = []
-    etiquetas   = []
-    for clase in clases:
-        r = reporte_dict[clase]
-        filas.append([f"{r['precision']:.2f}", f"{r['recall']:.2f}", f"{r['f1-score']:.2f}", f"{int(r['support'])}"])
-        etiquetas.append(clase)
-    # macro avg
-    m = reporte_dict["macro avg"]
-    filas.append([f"{m['precision']:.2f}", f"{m['recall']:.2f}", f"{m['f1-score']:.2f}", ""])
-    etiquetas.append("macro avg")
-    # accuracy
-    filas.append(["", "", f"{reporte_dict['accuracy']:.2f}", ""])
-    etiquetas.append("accuracy")
+    y_pred  = modelo.predict(X_test)
+    reporte = classification_report(y_test, y_pred, output_dict=True)
 
-    fig, ax = plt.subplots(figsize=(7, 3))
-    ax.axis("off")
-    tabla = ax.table(
-        cellText=filas,
-        rowLabels=etiquetas,
-        colLabels=cols,
-        cellLoc="center",
-        loc="center",
-    )
-    tabla.auto_set_font_size(False)
-    tabla.set_fontsize(11)
-    tabla.scale(1.2, 1.6)
-
-    # Color de encabezados
-    for j in range(len(cols)):
-        tabla[0, j].set_facecolor("#4472C4")
-        tabla[0, j].set_text_props(color="white", fontweight="bold")
-    for i in range(1, len(etiquetas) + 1):
-        tabla[i, -1].set_facecolor("#f0f0f0")
-
-    ax.set_title(f"Classification Report — {nombre}", fontsize=13, fontweight="bold", pad=12)
-    path = REPORTES_DIR / f"reporte_{nombre.lower()}.png"
-    fig.savefig(path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print(f"  Imagen guardada: {path}")
-
-
-def guardar_matriz_confusion(nombre: str, y_test, y_pred):
-    """Guarda la matriz de confusión como imagen PNG."""
-    clases = ["ALTA", "MEDIA", "BAJA"]
-    cm = confusion_matrix(y_test, y_pred, labels=clases)
-
-    fig, ax = plt.subplots(figsize=(5, 4))
-    im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
-    fig.colorbar(im, ax=ax)
-
-    ax.set_xticks(range(len(clases)))
-    ax.set_yticks(range(len(clases)))
-    ax.set_xticklabels(clases, fontsize=11)
-    ax.set_yticklabels(clases, fontsize=11)
-    ax.set_xlabel("Predicho", fontsize=11)
-    ax.set_ylabel("Real", fontsize=11)
-    ax.set_title(f"Matriz de confusión — {nombre}", fontsize=13, fontweight="bold", pad=12)
-
-    for i in range(len(clases)):
-        for j in range(len(clases)):
-            color = "white" if cm[i, j] > cm.max() / 2 else "black"
-            ax.text(j, i, str(cm[i, j]), ha="center", va="center", color=color, fontsize=13, fontweight="bold")
-
-    path = REPORTES_DIR / f"confusion_{nombre.lower()}.png"
-    fig.savefig(path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print(f"  Imagen guardada: {path}")
-
-
-def guardar_tabla_comparacion(resultados: dict):
-    """Guarda la tabla resumen comparativa como imagen PNG."""
-    nombres   = list(resultados.keys())
-    filas     = [[f"{resultados[n]['accuracy']:.4f}", f"{resultados[n]['f1_macro']:.4f}"] for n in nombres]
-    cols      = ["Accuracy", "F1-score macro"]
-
-    fig, ax = plt.subplots(figsize=(6, 2.5))
-    ax.axis("off")
-    tabla = ax.table(
-        cellText=filas,
-        rowLabels=nombres,
-        colLabels=cols,
-        cellLoc="center",
-        loc="center",
-    )
-    tabla.auto_set_font_size(False)
-    tabla.set_fontsize(11)
-    tabla.scale(1.3, 1.8)
-
-    # Encabezados
-    for j in range(len(cols)):
-        tabla[0, j].set_facecolor("#4472C4")
-        tabla[0, j].set_text_props(color="white", fontweight="bold")
-
-    # Destacar el mejor por F1
-    mejor_idx = max(range(len(nombres)), key=lambda i: resultados[nombres[i]]["f1_macro"])
-    for j in range(len(cols)):
-        tabla[mejor_idx + 1, j].set_facecolor("#E2EFDA")
-
-    ax.set_title("Comparación de algoritmos (LP-114)", fontsize=13, fontweight="bold", pad=12)
-    path = REPORTES_DIR / "comparacion_algoritmos.png"
-    fig.savefig(path, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print(f"  Imagen guardada: {path}")
-
-
-# ── Comparación de algoritmos (LP-114) ───────────────────────────────────────
-
-def comparar_modelos(X_train, X_test, y_train, y_test):
-    modelos = {
-        "DecisionTree":   DecisionTreeClassifier(random_state=RANDOM_STATE),
-        "RandomForest":   RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE),
-        "KNeighbors":     KNeighborsClassifier(n_neighbors=5),
-    }
-
-    resultados = {}
     print("\n" + "=" * 60)
-    print("COMPARACIÓN DE ALGORITMOS (LP-114)")
+    print("ENTRENAMIENTO — Decision Tree (LP-115)")
     print("=" * 60)
+    print(f"  Train: {len(X_train)} filas  |  Test: {len(X_test)} filas  |  Split: 80/20")
+    print(f"  random_state={RANDOM_STATE}")
+    print()
+    print(classification_report(y_test, y_pred))
+    print(f"  accuracy : {reporte['accuracy']:.4f}")
+    print(f"  f1 macro : {reporte['macro avg']['f1-score']:.4f}")
 
-    REPORTES_DIR.mkdir(exist_ok=True)
-
-    for nombre, modelo in modelos.items():
-        modelo.fit(X_train, y_train)
-        y_pred  = modelo.predict(X_test)
-        reporte = classification_report(y_test, y_pred, output_dict=True)
-        accuracy  = reporte["accuracy"]
-        f1_macro  = reporte["macro avg"]["f1-score"]
-        resultados[nombre] = {"accuracy": accuracy, "f1_macro": f1_macro, "modelo": modelo}
-
-        print(f"\n── {nombre} ──")
-        print(classification_report(y_test, y_pred))
-        guardar_tabla_reporte(nombre, reporte, y_test, y_pred)
-        guardar_matriz_confusion(nombre, y_test, y_pred)
-
-    guardar_tabla_comparacion(resultados)
-    return resultados
+    return modelo
 
 
-# ── Selección del modelo final (LP-115) ───────────────────────────────────────
+# ── Exportar y validar (LP-116) ───────────────────────────────────────────────
 
-def seleccionar_y_entrenar(resultados, X, y):
-    mejor_nombre = max(resultados, key=lambda n: resultados[n]["f1_macro"])
-    mejor_info   = resultados[mejor_nombre]
-
-    print("=" * 60)
-    print("SELECCIÓN DEL MODELO (LP-115)")
-    print("=" * 60)
-    for nombre, info in resultados.items():
-        marca = " ← ELEGIDO" if nombre == mejor_nombre else ""
-        print(f"  {nombre:20s}  accuracy={info['accuracy']:.4f}  f1_macro={info['f1_macro']:.4f}{marca}")
-
-    print(f"\nMotivo: mayor F1-score macro promedio entre las 3 clases.")
-    print(f"El modelo guardado es el mismo evaluado sobre el 20% de test (métricas honestas).")
-
-    # Se usa el modelo ya entrenado en el 80% — las métricas reportadas corresponden
-    # exactamente a este modelo, por lo que no se reentrena sobre el dataset completo.
-    return mejor_nombre, mejor_info["modelo"]
-
-
-# ── Exportar modelo (LP-116) ──────────────────────────────────────────────────
-
-def exportar(modelo, nombre: str):
+def exportar_y_validar(modelo):
     joblib.dump(modelo, MODEL_PATH)
     print(f"\nModelo exportado: {MODEL_PATH}")
 
-    # ── Tabla de validación ───────────────────────────────────────────────────
-    # Cubre los 9 cuadrantes de la matriz de prioridad.
-    # Valores fijos: no dependen de fechas ni del dataset.
-    # Un resultado inesperado indica que el modelo no aprendió la regla correctamente.
+    # Valida los 9 cuadrantes de la matriz de prioridad con valores fijos.
+    # No depende de fechas ni del dataset → resultado siempre reproducible.
     CASOS = [
         #  prob    dias   esperado
         (0.85,    1,    "ALTA"),   # prob>0.70 , ≤2 días  → ALTA
@@ -260,6 +106,8 @@ def exportar(modelo, nombre: str):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    print(f"Ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
     if not DATASET_PATH.exists():
         print(f"ERROR: no se encontró {DATASET_PATH}")
         print("Ejecutá primero: python3 ml/dataset/generar_dataset.py")
@@ -275,9 +123,8 @@ def main():
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
 
-    resultados     = comparar_modelos(X_train, X_test, y_train, y_test)
-    nombre, modelo = seleccionar_y_entrenar(resultados, X_train, y_train)
-    exportar(modelo, nombre)
+    modelo = entrenar(X_train, X_test, y_train, y_test)
+    exportar_y_validar(modelo)
 
 
 if __name__ == "__main__":

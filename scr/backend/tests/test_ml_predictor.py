@@ -2,6 +2,10 @@
 Tests para el servicio de predicción de prioridad.
 
 Cubre:
+  LP-116 — Exportar y versionar el modelo entrenado
+
+  CP-0145 (HP)  — CA-2: Modelo cargable sin errores en entorno limpio
+
   LP-117 — Servicio de predicción
 
   CP-0313 (HP)  — CA-1: Servicio invocable, devuelve prioridad sin errores
@@ -14,10 +18,41 @@ Tests NO implementados (requieren endpoint de actualización de envíos):
   CP-0149 — CA-5: Error al cambiar probabilidad con valor inválido
 """
 import pytest
+import joblib
+import numpy as np
+from pathlib import Path
 
 from ml_predictor import predecir_prioridad
 
 PRIORIDADES_VALIDAS = {"ALTA", "MEDIA", "BAJA"}
+
+MODEL_PATH = Path(__file__).parents[2] / "ml" / "modelo_prioridad.joblib"
+
+
+# ── CP-0145 — CA-2: Modelo cargable sin errores en entorno limpio ─────────────
+
+class TestCP0145ModeloCargable:
+
+    def test_cp0145_archivo_modelo_existe(self):
+        """CP-0145 (HP) — El archivo modelo_prioridad.joblib existe en el repositorio."""
+        assert MODEL_PATH.exists(), f"No se encontró el modelo en {MODEL_PATH}"
+
+    def test_cp0145_modelo_carga_sin_errores(self):
+        """CP-0145 (HP) — El modelo se carga con joblib sin lanzar excepciones."""
+        modelo = joblib.load(MODEL_PATH)
+        assert modelo is not None
+
+    def test_cp0145_modelo_tiene_metodo_predict(self):
+        """CP-0145 (HP) — El objeto cargado expone el método predict."""
+        modelo = joblib.load(MODEL_PATH)
+        assert hasattr(modelo, "predict")
+
+    def test_cp0145_modelo_acepta_datos_y_devuelve_prediccion(self):
+        """CP-0145 (HP) — El modelo recibe features y devuelve una prioridad válida."""
+        modelo = joblib.load(MODEL_PATH)
+        prediccion = modelo.predict(np.array([[0.85, 1]]))[0]
+        assert prediccion in PRIORIDADES_VALIDAS
+
 
 VALORES_VALIDOS = {
     "ALTA":  [
