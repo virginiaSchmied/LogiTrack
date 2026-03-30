@@ -66,7 +66,7 @@ def entrenar(X_train, X_test, y_train, y_test):
 
 def exportar_y_validar(modelo):
     joblib.dump(modelo, MODEL_PATH)
-    #print(f"\nModelo exportado: {MODEL_PATH}")
+    print(f"\nModelo exportado: {MODEL_PATH}")
 
     # Valida los 9 cuadrantes de la matriz de prioridad con valores fijos.
     # No depende de fechas ni del dataset → resultado siempre reproducible.

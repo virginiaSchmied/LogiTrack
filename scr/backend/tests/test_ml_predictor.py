@@ -53,6 +53,7 @@ class TestCP0145ModeloCargable:
         prediccion = modelo.predict(np.array([[0.85, 1]]))[0]
         assert prediccion in PRIORIDADES_VALIDAS
 
+
 VALORES_VALIDOS = {
     "ALTA":  [
         (0.85, 1),   # prob > 0.70, días ≤ 2
