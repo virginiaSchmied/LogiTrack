@@ -4,7 +4,7 @@ Tests para la creación de envíos.
 Cubre:
   LP-2   — Registrar datos básicos del envío (CP-0003..0009)
   LP-104 — Generar tracking ID automático    (CP-0094..0097)
-  LP-131 — Validar campos obligatorios       (CP-0174..0185)
+  LP-131 — Validar campos obligatorios       (CP-0174..0185, CP-0175)
 
 Tests NO implementados (requieren autenticación JWT, no disponible en este prototipo):
   CP-0001 — JWT rol=Operador requerido para acceder al formulario
@@ -195,10 +195,10 @@ def test_cp0153_prioridad_no_es_editable_manualmente(client):
     assert client.put(f"/envios/{tid}", json={"prioridad": "BAJA"}).status_code in (404, 405)
 
 
-# ── LP-117 — Edge Case ────────────────────────────────────────────────────────
+# ── LP-131 — Edge Case ────────────────────────────────────────────────────────
 
-def test_cp0313_payload_vacio_devuelve_422_con_detalle(client):
-    """CP-0313 — Edge Case: POST con payload vacío retorna 422 con detalle de los campos faltantes."""
+def test_cp0175_payload_vacio_devuelve_422_con_detalle(client):
+    """CP-0175 — Edge Case: POST con payload vacío retorna 422 con detalle de los campos faltantes."""
     res = client.post("/envios/", json={})
     assert res.status_code == 422
     campos_error = [e["loc"][-1] for e in res.json()["detail"]]
