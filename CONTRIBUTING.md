@@ -26,7 +26,7 @@ source venv/bin/activate        # Linux/macOS
 venv\Scripts\activate           # Windows
 
 # Instalar dependencias
-cd scr/backend
+cd src/backend
 pip install -r requirements.txt
 pip install -r requirements-test.txt
 ```
@@ -55,7 +55,7 @@ main
 
 3. **Ejecutar los tests** antes de hacer push:
    ```bash
-   cd scr/backend
+   cd src/backend
    pytest
    ```
 
@@ -99,13 +99,13 @@ test(e2e): agregar test de accesibilidad en formulario
 
 ### Tests unitarios
 
-- Ubicación: `scr/backend/tests/`
+- Ubicación: src/backend/tests/`
 - Framework: `pytest`
 - Cada nuevo endpoint debe tener su archivo de test correspondiente (`test_<recurso>.py`)
 - Usar fixtures definidas en `conftest.py` para la base de datos de prueba
 
 ```bash
-cd scr/backend
+cd src/backend
 pytest --html=tests/reporte.html
 ```
 
@@ -124,7 +124,7 @@ pytest
 
 ## Migraciones de base de datos
 
-- Todo cambio de esquema debe hacerse mediante un nuevo archivo `.sql` en `scr/db/migrations/`
+- Todo cambio de esquema debe hacerse mediante un nuevo archivo `.sql` en `src/db/migrations/`
 - Nombrar con prefijo descriptivo: `alter_tabla_envio_add_column_peso.sql`
 - No modificar migraciones ya ejecutadas en entornos compartidos
 

@@ -16,7 +16,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r scr/backend/requirements.txt
+          pip install -r src/backend/requirements.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -24,7 +24,7 @@ jobs:
           node-version: '20'
 
       - name: Install JavaScript dependencies
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: npm install
 
   lint:
@@ -39,7 +39,7 @@ jobs:
           flake8 .
 
       - name: Lint JavaScript code
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: |
           npm install
           npm run lint
@@ -53,12 +53,12 @@ jobs:
       - name: Run Python tests
         run: |
           python -m pip install --upgrade pip
-          pip install -r scr/backend/requirements.txt
+          pip install -r src/backend/requirements.txt
           pip install pytest httpx
-          pytest scr/backend/tests/ -v
+          pytest src/backend/tests/ -v
 
       - name: Run JavaScript tests
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: |
           npm install
           npm test
