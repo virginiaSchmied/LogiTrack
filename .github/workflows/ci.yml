@@ -24,7 +24,7 @@ jobs:
           node-version: '20'
 
       - name: Install JavaScript dependencies
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: npm install
 
   lint:
@@ -39,7 +39,7 @@ jobs:
           flake8 .
 
       - name: Lint JavaScript code
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: |
           npm install
           npm run lint
@@ -58,7 +58,7 @@ jobs:
           pytest src/backend/tests/ -v
 
       - name: Run JavaScript tests
-        working-directory: ./scr/frontend
+        working-directory: ./src/frontend
         run: |
           npm install
           npm test

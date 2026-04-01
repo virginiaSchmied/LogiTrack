@@ -40,7 +40,7 @@ La prioridad resulta de la combinación de ambas features en una matriz de 3×3:
 
 ### Datos reales
 
-Se insertaron 24 envíos en `scr/db/migrations/insert_datos_iniciales.sql` cubriendo los 9 cuadrantes de la matriz con prioridades correctamente etiquetadas. Los datos se exportaron a CSV con la siguiente query:
+Se insertaron 24 envíos en `src/db/migrations/insert_datos_iniciales.sql` cubriendo los 9 cuadrantes de la matriz con prioridades correctamente etiquetadas. Los datos se exportaron a CSV con la siguiente query:
 
 ```sql
 SELECT
@@ -148,7 +148,7 @@ Los valores de entrada son fijos y no dependen de fechas, por lo que la validaci
 
 ## 6. Servicio de predicción 
 
-Implementado en `scr/backend/ml_predictor.py`:
+Implementado en `src/backend/ml_predictor.py`:
 
 - Carga el modelo una sola vez al iniciar la aplicación (singleton)
 - Expone `predecir_prioridad(probabilidad_retraso, dias_para_entrega) → str | None`
@@ -158,7 +158,7 @@ Implementado en `scr/backend/ml_predictor.py`:
 
 ## 7. Persistencia de prioridad
 
-Integrado en `scr/backend/routers/envios.py` (`POST /envios/`):
+Integrado en `src/backend/routers/envios.py` (`POST /envios/`):
 
 1. Si `probabilidad_retraso` está presente en el payload, calcula `dias_para_entrega = max(0, (fecha_entrega_estimada − date.today()).days)`
 2. Llama a `predecir_prioridad()` y persiste el resultado en `envio.prioridad`
@@ -169,7 +169,7 @@ Integrado en `scr/backend/routers/envios.py` (`POST /envios/`):
 
 ## 8. Visualización en el frontend
 
-Cambios en `scr/frontend/`:
+Cambios en `src/frontend/`:
 
 - Columna **Prioridad** en la tabla de listado con badge de color
 - Badge de prioridad en el modal de detalle del envío
@@ -188,7 +188,7 @@ Cambios en `scr/frontend/`:
 ## Estructura de archivos
 
 ```
-scr/
+src/
 ├── backend/
 │   ├── ml_predictor.py              # Servicio de predicción (LP-117)
 │   └── routers/
