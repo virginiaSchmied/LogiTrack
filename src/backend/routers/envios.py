@@ -9,11 +9,47 @@ from datetime import date
 
 from database import get_db
 from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
-from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo, EnvioPublicoOut
+from schemas import (
+    EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse,
+    EnvioUpdateContacto, EnvioUpdateOperativo, EnvioPublicoOut,
+    EnvioOutDetalle, EnvioCambioEstado, DireccionOut
+)
 from ml_predictor import predecir_prioridad
 from auth import require_operador_supervisor, require_supervisor
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
+
+
+FLUJO_NORMAL = [
+    EstadoEnvioEnum.REGISTRADO,
+    EstadoEnvioEnum.EN_DEPOSITO,
+    EstadoEnvioEnum.EN_TRANSITO,
+    EstadoEnvioEnum.EN_SUCURSAL,
+    EstadoEnvioEnum.EN_DISTRIBUCION,
+    EstadoEnvioEnum.ENTREGADO,
+]
+
+ESTADOS_EXCEPCION = [
+    EstadoEnvioEnum.RETRASADO,
+    EstadoEnvioEnum.CANCELADO,
+    EstadoEnvioEnum.BLOQUEADO,
+]
+
+TRANSICIONES_VALIDAS = {
+    EstadoEnvioEnum.REGISTRADO:      [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.CANCELADO],
+    EstadoEnvioEnum.EN_DEPOSITO:     [EstadoEnvioEnum.EN_TRANSITO, EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO],
+    EstadoEnvioEnum.EN_TRANSITO:     [EstadoEnvioEnum.EN_SUCURSAL, EstadoEnvioEnum.RETRASADO],
+    EstadoEnvioEnum.EN_SUCURSAL:     [EstadoEnvioEnum.EN_DISTRIBUCION, EstadoEnvioEnum.RETRASADO,
+                                      EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO],
+    EstadoEnvioEnum.EN_DISTRIBUCION: [EstadoEnvioEnum.ENTREGADO, EstadoEnvioEnum.RETRASADO],
+    EstadoEnvioEnum.ENTREGADO:       [],
+    EstadoEnvioEnum.RETRASADO:       [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.EN_TRANSITO,
+                                      EstadoEnvioEnum.EN_SUCURSAL, EstadoEnvioEnum.EN_DISTRIBUCION],
+    EstadoEnvioEnum.BLOQUEADO:       [EstadoEnvioEnum.EN_DEPOSITO, EstadoEnvioEnum.EN_SUCURSAL],
+    EstadoEnvioEnum.CANCELADO:       [],
+    EstadoEnvioEnum.ELIMINADO:       [],
+}
+
 
 
 def _generar_tracking_id(db: Session) -> str:
@@ -196,18 +232,58 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
     )
 
 
+
+
+
 # ── GET /envios/{tracking_id} ─────────────────────────────────────────────────
 
-@router.get("/{tracking_id}", response_model=EnvioOut)
+@router.get("/{tracking_id}", response_model=EnvioOutDetalle)
 def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
     """
     Devuelve el detalle de un envío por tracking ID.
-    Endpoint de acceso público — no requiere autenticación. LP-136, LP-250 CA-4.
+    Incluye ultima_ubicacion: la dirección del último EventoDeEnvio con ubicación registrada.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
         raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
-    return envio
+
+    resultado = EnvioOutDetalle.model_validate(envio)
+
+    ultimo = (
+        db.query(EventoDeEnvio)
+        .filter(
+            EventoDeEnvio.envio_uuid == envio.uuid,
+            EventoDeEnvio.ubicacion_actual_id.isnot(None),
+        )
+        .order_by(EventoDeEnvio.fecha_hora.desc())
+        .first()
+    )
+    if ultimo:
+        dir_obj = db.query(Direccion).filter(Direccion.id == ultimo.ubicacion_actual_id).first()
+        if dir_obj:
+            resultado.ultima_ubicacion = DireccionOut.model_validate(dir_obj)
+
+    # Para estados de excepción reversibles (RETRASADO, BLOQUEADO), determinar el estado previo al que revertir.
+    # Buscamos el evento que transitó AL estado de excepción actual y leemos su estado_inicial —
+    # eso es exactamente el estado desde el que se entró, sin depender del orden de timestamps.
+    ESTADOS_REVERSIBLES = [EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO]
+    if envio.estado in ESTADOS_REVERSIBLES:
+        evento_excepcion = (
+            db.query(EventoDeEnvio)
+            .filter(
+                EventoDeEnvio.envio_uuid == envio.uuid,
+                EventoDeEnvio.estado_final == envio.estado,
+                EventoDeEnvio.accion == AccionEnvioEnum.CAMBIO_ESTADO,
+            )
+            .order_by(EventoDeEnvio.fecha_hora.desc())
+            .first()
+        )
+        resultado.estado_revertir = (
+            evento_excepcion.estado_inicial.value if evento_excepcion else EstadoEnvioEnum.EN_DEPOSITO.value
+        )
+
+    return resultado
+
 
 
 # ── DELETE /envios/{tracking_id} ──────────────────────────────────────────────
@@ -294,17 +370,12 @@ def actualizar_contacto(
 # ── PATCH /envios/{tracking_id}/operativo ────────────────────────────────────
 
 @router.patch("/{tracking_id}/operativo", response_model=EnvioOut)
-def actualizar_operativo(
-    tracking_id: str,
-    payload: EnvioUpdateOperativo,
-    db: Session = Depends(get_db),
-    current_user: Usuario = Depends(require_operador_supervisor),
-):
+def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Session = Depends(get_db)):
     """
     Modifica la fecha estimada de entrega y la probabilidad de retraso de un envío.
     Recalcula la prioridad con el modelo ML si se provee probabilidad_retraso.
     Registra un EventoDeEnvio de MODIFICACION.
-    Requiere rol Operador o Supervisor. Cubre LP-154, LP-249.
+    TODO: validar rol=OPERADOR cuando se implemente auth.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -323,13 +394,106 @@ def actualizar_operativo(
     except (ValueError, RuntimeError) as e:
         logger.warning("No se pudo predecir la prioridad: %s", e)
 
+    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
+    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.MODIFICACION,
         estado_inicial=envio.estado,
         estado_final=envio.estado,
         ubicacion_actual_id=None,
-        usuario_uuid=current_user.uuid,
+        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    db.refresh(envio)
+    return envio
+
+
+def _resolver_ubicacion(payload_nueva, payload_reusar, envio, db):
+    """
+    Resuelve y persiste la ubicación para un cambio de estado o excepción.
+    Retorna el UUID de la dirección a usar.
+    """
+    if payload_reusar:
+        ultimo = (
+            db.query(EventoDeEnvio)
+            .filter(
+                EventoDeEnvio.envio_uuid == envio.uuid,
+                EventoDeEnvio.ubicacion_actual_id.isnot(None),
+            )
+            .order_by(EventoDeEnvio.fecha_hora.desc())
+            .first()
+        )
+        if not ultimo:
+            raise HTTPException(status_code=422, detail="No hay ubicación anterior registrada para este envío")
+        return ultimo.ubicacion_actual_id
+    else:
+        nueva_dir = Direccion(
+            id=uuid.uuid4(),
+            calle=payload_nueva.calle,
+            numero=payload_nueva.numero,
+            ciudad=payload_nueva.ciudad,
+            provincia=payload_nueva.provincia,
+            codigo_postal=payload_nueva.codigo_postal,
+        )
+        db.add(nueva_dir)
+        db.flush()
+        return nueva_dir.id
+
+
+# ── PATCH /envios/{tracking_id}/estado ───────────────────────────────────────
+
+@router.patch("/{tracking_id}/estado", response_model=EnvioOut)
+def cambiar_estado(tracking_id: str, payload: EnvioCambioEstado, db: Session = Depends(get_db)):
+    """
+    Cambia el estado de un envío validando contra el grafo de transiciones permitidas.
+    Cubre flujo normal, estados de excepción y reversiones en un único endpoint.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+    if envio.estado == EstadoEnvioEnum.ELIMINADO:
+        raise HTTPException(status_code=409, detail=f"Envío {tracking_id} está eliminado y no puede modificarse")
+
+    destinos_validos = TRANSICIONES_VALIDAS.get(envio.estado, [])
+    if payload.nuevo_estado not in destinos_validos:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Transición inválida: {envio.estado.value} → {payload.nuevo_estado.value}"
+        )
+
+    # CANCELADO no requiere ubicación
+    ESTADOS_UBICACION_OBLIGATORIA = [
+        EstadoEnvioEnum.EN_DEPOSITO,
+        EstadoEnvioEnum.EN_SUCURSAL,
+        EstadoEnvioEnum.ENTREGADO,
+    ]
+    if payload.nuevo_estado == EstadoEnvioEnum.CANCELADO:
+        ubicacion_id = None
+    elif payload.nuevo_estado in ESTADOS_UBICACION_OBLIGATORIA:
+        if payload.nueva_ubicacion is None:
+            raise HTTPException(status_code=422, detail=f"La ubicación nueva es obligatoria para el estado {payload.nuevo_estado.value}")
+        if payload.reusar_ubicacion_anterior:
+            raise HTTPException(status_code=422, detail=f"No se puede reutilizar la ubicación anterior para el estado {payload.nuevo_estado.value}")
+        ubicacion_id = _resolver_ubicacion(payload.nueva_ubicacion, False, envio, db)
+    else:
+        if payload.nueva_ubicacion is None and not payload.reusar_ubicacion_anterior:
+            raise HTTPException(status_code=422, detail="Debe proveer una ubicación o indicar que se reutiliza la anterior")
+        ubicacion_id = _resolver_ubicacion(payload.nueva_ubicacion, payload.reusar_ubicacion_anterior, envio, db)
+
+    estado_anterior = envio.estado
+    envio.estado    = payload.nuevo_estado
+
+    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.CAMBIO_ESTADO,
+        estado_inicial=estado_anterior,
+        estado_final=payload.nuevo_estado,
+        ubicacion_actual_id=ubicacion_id,
+        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
         envio_uuid=envio.uuid,
     )
     db.add(evento)
