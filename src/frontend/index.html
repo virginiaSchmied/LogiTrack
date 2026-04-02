@@ -282,12 +282,84 @@
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;">
         <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Editar estado del envío">Editar estado</button>
+        <button class="btn btn-ghost btn-sm" id="btn-movimiento" style="display:none;" aria-label="Registrar movimiento">Registrar movimiento</button>
         <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
         <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
         <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
       </div>
     </div>
+    <div class="detalle-tabs-row">
+      <div class="edit-tabs-bar" id="detalle-tabs-bar">
+        <button class="edit-tab active" id="detalle-tab-info" onclick="switchDetalleTab('info')">Información</button>
+        <button class="edit-tab" id="detalle-tab-historial" onclick="switchDetalleTab('historial')">Historial</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-auditoria" onclick="openAuditoria()" aria-label="Ver auditoría del envío">Ver auditoría</button>
+    </div>
     <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══ MOVIMIENTO FÍSICO ══ -->
+<div id="movimiento-overlay" class="modal-overlay" style="display:none;" onclick="closeMovimiento()" role="dialog" aria-modal="true" aria-labelledby="movimiento-modal-tid">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <span class="modal-title-text">Registrar movimiento</span>
+        <span class="modal-tracking-id" id="movimiento-modal-tid"></span>
+      </div>
+      <button class="modal-close" onclick="closeMovimiento()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="mov-info-box">
+        <span class="mov-info-icon">📍</span>
+        <p class="mov-desc">Registrá la ubicación actual del envío. El estado no cambia.</p>
+      </div>
+      <div class="mov-form">
+        <div class="mov-field-full">
+          <label class="form-label" for="mov-calle">Calle <span class="req">*</span></label>
+          <input class="form-control" id="mov-calle" type="text" placeholder="Av. San Martín" autocomplete="off">
+        </div>
+        <div class="form-row-2">
+          <div>
+            <label class="form-label" for="mov-numero">Número <span class="req">*</span></label>
+            <input class="form-control" id="mov-numero" type="text" placeholder="1234" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label" for="mov-cp">Cód. postal <span class="req">*</span></label>
+            <input class="form-control" id="mov-cp" type="text" placeholder="2000" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div>
+            <label class="form-label" for="mov-ciudad">Ciudad <span class="req">*</span></label>
+            <input class="form-control" id="mov-ciudad" type="text" placeholder="Rosario" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label" for="mov-provincia">Provincia <span class="req">*</span></label>
+            <input class="form-control" id="mov-provincia" type="text" placeholder="Santa Fe" autocomplete="off">
+          </div>
+        </div>
+        <div id="mov-error" class="field-error"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeMovimiento()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-mov-confirmar" onclick="confirmarMovimiento()">Confirmar movimiento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AUDITORÍA ══ -->
+<div id="auditoria-overlay" class="modal-overlay" style="display:none;" onclick="closeAuditoria()" role="dialog" aria-modal="true" aria-labelledby="auditoria-tracking-id">
+  <div class="modal-box auditoria-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span class="modal-label">Auditoría</span>
+        <span class="modal-tracking-id" id="auditoria-tracking-id"></span>
+      </div>
+      <button class="modal-close" onclick="closeAuditoria()" aria-label="Cerrar auditoría">✕</button>
+    </div>
+    <div class="modal-body" id="auditoria-body"></div>
   </div>
 </div>
 

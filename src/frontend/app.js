@@ -191,7 +191,7 @@ const TRANSICIONES_VALIDAS = {
   'EN_DISTRIBUCION': ['ENTREGADO', 'RETRASADO'],
   'ENTREGADO':       [],
   'RETRASADO':       ['EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION'],
-  'BLOQUEADO':       ['EN_DEPOSITO', 'EN_SUCURSAL'],
+  'BLOQUEADO':       ['EN_TRANSITO', 'EN_SUCURSAL'],
   'CANCELADO':       [],
   'ELIMINADO':       [],
 };
@@ -200,8 +200,53 @@ const ESTADOS_EXCEPCION              = ['RETRASADO', 'CANCELADO', 'BLOQUEADO'];
 const FLUJO_NORMAL                   = ['REGISTRADO', 'EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION', 'ENTREGADO'];
 const ESTADOS_UBICACION_OBLIGATORIA  = ['EN_DEPOSITO', 'EN_SUCURSAL', 'ENTREGADO'];
 
+// ─── Historial ────────────────────────────────────────────────────────────────
+
+const ACCION_LABEL = {
+  'CREACION':      'Registro inicial',
+  'CAMBIO_ESTADO': 'Cambio de estado',
+  'MOVIMIENTO':    'Movimiento',
+};
+
+const ESTADOS_EXCEPCION_SET = new Set(['RETRASADO', 'CANCELADO', 'BLOQUEADO']);
+
+function renderHistorial(eventos) {
+  if (!eventos || eventos.length === 0) {
+    return `<p class="historial-empty">Sin movimientos registrados.</p>`;
+  }
+  const items = eventos.map((ev, i) => {
+    const esExcepcion = ESTADOS_EXCEPCION_SET.has(ev.estado);
+    const esUltimo    = i === eventos.length - 1;
+    const badgeHtml   = ev.accion === 'CAMBIO_ESTADO'
+      ? `<span class="badge ${BADGE_CLASS[ev.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[ev.estado] || ev.estado)}</span>`
+      : '';
+    const ubicHtml    = ev.ubicacion
+      ? `<span class="historial-ubic">${escHtml(ev.ubicacion.calle)} ${escHtml(ev.ubicacion.numero)}, ${escHtml(ev.ubicacion.ciudad)}, ${escHtml(ev.ubicacion.provincia)}</span>`
+      : '';
+    return `
+      <div class="historial-item${esUltimo ? ' historial-item--last' : ''}${esExcepcion ? ' historial-item--excepcion' : ''}">
+        <div class="historial-dot"></div>
+        <div class="historial-content">
+          <div class="historial-accion">${escHtml(ACCION_LABEL[ev.accion] || ev.accion)}${badgeHtml}</div>
+          ${ubicHtml}
+          <div class="historial-fecha mono-text">${escHtml(formatDatetime(ev.fecha_hora))}</div>
+        </div>
+      </div>`;
+  }).join('');
+  return `<div class="historial-timeline">${items}</div>`;
+}
+
+
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
-let _envioDetalle = null;
+let _envioDetalle   = null;
+let _detalleContent = { info: '', historial: '' };
+
+function switchDetalleTab(tab) {
+  const body = document.getElementById('modal-body');
+  document.getElementById('detalle-tab-info').classList.toggle('active', tab === 'info');
+  document.getElementById('detalle-tab-historial').classList.toggle('active', tab === 'historial');
+  body.innerHTML = _detalleContent[tab] || '';
+}
 
 async function openDetalle(trackingId) {
   const overlay  = document.getElementById('modal-overlay');
@@ -212,16 +257,22 @@ async function openDetalle(trackingId) {
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
-  document.getElementById('btn-eliminar').style.display      = 'none';
-  document.getElementById('btn-editar').style.display        = 'none';
+  document.getElementById('btn-eliminar').style.display       = 'none';
+  document.getElementById('btn-editar').style.display         = 'none';
   document.getElementById('btn-cambiar-estado').style.display = 'none';
+  document.getElementById('detalle-tab-info').classList.add('active');
+  document.getElementById('detalle-tab-historial').classList.remove('active');
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
   try {
-    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const e = await res.json();
+    const [resDetalle, resHistorial] = await Promise.all([
+      fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`),
+      fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/historial`),
+    ]);
+    if (!resDetalle.ok) throw new Error(`Error ${resDetalle.status}`);
+    const e         = await resDetalle.json();
+    const historial = resHistorial.ok ? await resHistorial.json() : [];
     _envioDetalle = e;
 
     estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
@@ -229,6 +280,7 @@ async function openDetalle(trackingId) {
     const btnEliminar      = document.getElementById('btn-eliminar');
     const btnEditar        = document.getElementById('btn-editar');
     const btnCambiarEstado = document.getElementById('btn-cambiar-estado');
+    const btnMovimiento    = document.getElementById('btn-movimiento');
 
     // Edit (contacto/operativo): show for non-ELIMINADO, non-CANCELADO
     if (e.estado !== 'ELIMINADO' && e.estado !== 'CANCELADO') {
@@ -246,8 +298,13 @@ async function openDetalle(trackingId) {
       btnCambiarEstado.style.display = '';
       btnCambiarEstado.onclick = () => { closeDetalle(); openEstado(e.tracking_id, e.estado, e.ultima_ubicacion || null, e.estado_revertir || null); };
     }
+    // Registrar movimiento: envíos activos (no ELIMINADO, no ENTREGADO, no CANCELADO)
+    if (!['ELIMINADO', 'ENTREGADO', 'CANCELADO'].includes(e.estado)) {
+      btnMovimiento.style.display = '';
+      btnMovimiento.onclick = () => { closeDetalle(); openMovimiento(e.tracking_id); };
+    }
 
-    body.innerHTML = `
+    const htmlInfo = `
       <div class="detail-grid">
 
         <div class="detail-section">
@@ -283,8 +340,13 @@ async function openDetalle(trackingId) {
           </div>
         </div>
 
-      </div>
-    `;
+      </div>`;
+
+    const htmlHistorial = `<div class="historial-panel">${renderHistorial(historial)}</div>`;
+
+    _detalleContent = { info: htmlInfo, historial: htmlHistorial };
+    body.innerHTML  = htmlInfo;
+    switchDetalleTab('info');
   } catch (err) {
     console.error('Error al cargar detalle:', err);
     body.innerHTML = `
@@ -301,8 +363,147 @@ function closeDetalle() {
   document.getElementById('btn-eliminar').style.display        = 'none';
   document.getElementById('btn-editar').style.display          = 'none';
   document.getElementById('btn-cambiar-estado').style.display  = 'none';
+  document.getElementById('btn-movimiento').style.display      = 'none';
   document.body.style.overflow = '';
   _envioDetalle = null;
+}
+
+
+// ─── Movimiento físico (LP-162) ───────────────────────────────────────────────
+
+function openMovimiento(trackingId) {
+  document.getElementById('movimiento-modal-tid').textContent = trackingId;
+  ['mov-calle','mov-numero','mov-cp','mov-ciudad','mov-provincia'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('mov-error').classList.remove('visible');
+  document.getElementById('movimiento-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMovimiento() {
+  document.getElementById('movimiento-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function confirmarMovimiento() {
+  const trackingId = document.getElementById('movimiento-modal-tid').textContent;
+  const errorEl    = document.getElementById('mov-error');
+  const btn        = document.getElementById('btn-mov-confirmar');
+
+  const calle    = document.getElementById('mov-calle').value.trim();
+  const numero   = document.getElementById('mov-numero').value.trim();
+  const cp       = document.getElementById('mov-cp').value.trim();
+  const ciudad   = document.getElementById('mov-ciudad').value.trim();
+  const provincia = document.getElementById('mov-provincia').value.trim();
+
+  if (!calle || !numero || !cp || !ciudad || !provincia) {
+    errorEl.textContent = 'Todos los campos de ubicación son obligatorios.';
+    errorEl.classList.add('visible');
+    return;
+  }
+
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/movimientos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ubicacion: { calle, numero, ciudad, provincia, codigo_postal: cp } }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Error ${res.status}`);
+    }
+    closeMovimiento();
+    openDetalle(trackingId);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar movimiento';
+  }
+}
+
+
+// ─── Auditoría (LP-174) ───────────────────────────────────────────────────────
+
+const ACCION_AUDITORIA_LABEL = {
+  'CREACION':      'Creación',
+  'MODIFICACION':  'Modificación',
+  'CAMBIO_ESTADO': 'Cambio de estado',
+  'MOVIMIENTO':    'Movimiento',
+  'ELIMINACION':   'Eliminación',
+};
+
+async function openAuditoria() {
+  if (!_envioDetalle) return;
+  const trackingId = _envioDetalle.tracking_id;
+
+  const overlay = document.getElementById('auditoria-overlay');
+  const body    = document.getElementById('auditoria-body');
+  document.getElementById('auditoria-tracking-id').textContent = trackingId;
+  body.innerHTML = '<div class="modal-loading">Cargando auditoría…</div>';
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/auditoria`);
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const eventos = await res.json();
+
+    if (eventos.length === 0) {
+      body.innerHTML = `<p class="historial-empty">Sin eventos registrados.</p>`;
+      return;
+    }
+
+    const filas = eventos.map(ev => {
+      const accion    = escHtml(ACCION_AUDITORIA_LABEL[ev.accion] || ev.accion);
+      const badgeHtml = `<span class="badge ${BADGE_CLASS[ev.estado_final] || 'badge-registrado'}">${escHtml(BADGE_LABEL[ev.estado_final] || ev.estado_final)}</span>`;
+      const ubicHtml  = ev.ubicacion
+        ? escHtml(`${ev.ubicacion.calle} ${ev.ubicacion.numero}, ${ev.ubicacion.ciudad}, ${ev.ubicacion.provincia} (${ev.ubicacion.codigo_postal})`)
+        : '—';
+      const desde = ev.estado_inicial
+        ? `<span class="badge ${BADGE_CLASS[ev.estado_inicial] || 'badge-registrado'} badge-sm">${escHtml(BADGE_LABEL[ev.estado_inicial] || ev.estado_inicial)}</span>`
+        : '—';
+      return `
+        <tr>
+          <td data-label="Fecha">${escHtml(formatDatetime(ev.fecha_hora))}</td>
+          <td data-label="Acción"><span class="auditoria-accion auditoria-accion--${ev.accion.toLowerCase()}">${accion}</span></td>
+          <td data-label="Desde">${desde}</td>
+          <td data-label="Estado">${badgeHtml}</td>
+          <td data-label="Ubicación">${ubicHtml}</td>
+          <td data-label="Usuario" class="auditoria-usuario">${escHtml(ev.usuario_email)}</td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="auditoria-table-wrap">
+        <table class="auditoria-table">
+          <thead>
+            <tr>
+              <th>Fecha y hora</th>
+              <th>Acción</th>
+              <th>Desde</th>
+              <th>Estado resultante</th>
+              <th>Ubicación</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    body.innerHTML = `<div class="empty-state"><div class="e-icon">⚠️</div><div class="e-title">Error al cargar auditoría</div><p class="e-desc">${escHtml(err.message)}</p></div>`;
+  }
+}
+
+function closeAuditoria() {
+  document.getElementById('auditoria-overlay').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ─── Eliminación de envío ─────────────────────────────────────────────────────

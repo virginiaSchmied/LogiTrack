@@ -4,7 +4,7 @@ from datetime import date, datetime
 from uuid import UUID
 import re
 
-from models import EstadoEnvioEnum, NivelPrioridadEnum
+from models import EstadoEnvioEnum, NivelPrioridadEnum, AccionEnvioEnum
 
 
 # ── Dirección ────────────────────────────────────────────────────────────────
@@ -184,3 +184,38 @@ class EnvioCambioEstado(BaseModel):
         "ciudad": "Mendoza", "provincia": "Mendoza", "codigo_postal": "5500",
     }])
     reusar_ubicacion_anterior: bool = Field(False, examples=[False])
+
+
+# ── Movimiento físico ─────────────────────────────────────────────────────────
+
+class MovimientoCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    ubicacion: DireccionCreate = Field(..., examples=[{
+        "calle": "Ruta 9", "numero": "km 45",
+        "ciudad": "Rosario", "provincia": "Santa Fe", "codigo_postal": "2000",
+    }])
+
+
+# ── Historial de envío ────────────────────────────────────────────────────────
+
+class EventoHistorialOut(BaseModel):
+    accion:      AccionEnvioEnum
+    estado:      EstadoEnvioEnum
+    ubicacion:   Optional[DireccionOut] = None
+    fecha_hora:  datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Auditoría de envío (LP-174) ───────────────────────────────────────────────
+
+class EventoAuditoriaOut(BaseModel):
+    accion:         AccionEnvioEnum
+    estado_inicial: Optional[EstadoEnvioEnum] = None
+    estado_final:   EstadoEnvioEnum
+    ubicacion:      Optional[DireccionOut] = None
+    usuario_email:  str
+    fecha_hora:     datetime
+
+    model_config = {"from_attributes": True}
