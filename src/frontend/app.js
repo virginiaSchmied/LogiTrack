@@ -101,10 +101,21 @@ function initApp() {
 function showLoginScreen() {
   document.getElementById('login-screen').style.display = '';
   document.getElementById('app-wrapper').style.display  = 'none';
-  // Limpiar errores y campos del form de login
+  closeLoginModal();
+}
+
+function openLoginModal() {
+  document.getElementById('login-modal').style.display = '';
   document.getElementById('login-email').value    = '';
   document.getElementById('login-password').value = '';
   _hideLoginError();
+  _clearLoginFieldError('login-email');
+  _clearLoginFieldError('login-password');
+  setTimeout(() => document.getElementById('login-email').focus(), 50);
+}
+
+function closeLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
 }
 
 function showApp() {
@@ -156,6 +167,7 @@ async function handleApiError(res) {
   if (res.status === 401) {
     clearAuthState();
     showLoginScreen();
+    openLoginModal();
     return true; // fue un 401
   }
   return false;

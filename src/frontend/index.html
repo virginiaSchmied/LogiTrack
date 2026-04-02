@@ -13,22 +13,54 @@
 
 <a href="#main-content" class="skip-link">Ir al contenido principal</a>
 
-<!-- ══ PANTALLA DE LOGIN ══ -->
-<div id="login-screen" style="display:none;" aria-label="Pantalla de inicio de sesión">
-  <div class="login-wrap">
+<!-- ══ PANTALLA INICIAL (pública) ══ -->
+<div id="login-screen" style="display:none;" aria-label="Pantalla de inicio">
 
-    <a href="#" class="login-brand" aria-label="LogiTrack inicio">
-      <span class="brand-icon" aria-hidden="true">🚚</span>
-      Logi<span class="brand-accent">Track</span>
-    </a>
+  <!-- Navbar pública -->
+  <nav class="navbar" role="navigation" aria-label="Navegación">
+    <div class="navbar-inner">
+      <a href="#" class="navbar-brand" aria-label="LogiTrack inicio">
+        <span class="brand-icon" aria-hidden="true">🚚</span>Logi<span class="brand-accent">Track</span>
+      </a>
+      <button class="btn btn-primary btn-sm" onclick="openLoginModal()" aria-label="Iniciar sesión en el sistema">
+        Iniciar sesión
+      </button>
+    </div>
+  </nav>
 
-    <!-- Tarjeta de login -->
-    <div class="login-card" role="main">
-      <h1 class="login-title">Iniciar sesión</h1>
+  <!-- Contenido principal: consulta pública -->
+  <main class="public-main" id="main-content">
+    <div class="public-hero">
+      <h1 class="public-hero-title">Consultá el estado de tu envío</h1>
+      <p class="public-hero-sub">Ingresá tu tracking ID para ver el estado actual. No necesitás cuenta.</p>
+      <div class="public-track" aria-label="Consulta pública de estado de envío">
+        <div class="public-track-row">
+          <label for="public-track-input" class="visually-hidden">Tracking ID</label>
+          <input type="text" class="form-control" id="public-track-input"
+            placeholder="Ej: LT-00000001" aria-label="Tracking ID del envío"
+            autocomplete="off" style="text-transform:uppercase"
+            onkeydown="if(event.key==='Enter') buscarPublico()"/>
+          <button class="btn btn-primary" onclick="buscarPublico()" aria-label="Consultar envío">
+            Consultar
+          </button>
+        </div>
+        <div id="public-track-result" aria-live="polite"></div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══ MODAL DE LOGIN ══ -->
+<div id="login-modal" class="modal-overlay" style="display:none;" onclick="closeLoginModal()" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+  <div class="modal-box login-modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="login-modal-title" id="login-modal-title">Iniciar sesión</span>
+      <button class="modal-close" onclick="closeLoginModal()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body">
       <p class="login-subtitle">Accedé al sistema con tus credenciales asignadas.</p>
-
       <div class="login-error" id="login-error" role="alert" aria-live="assertive"></div>
-
       <form id="login-form" novalidate aria-label="Formulario de inicio de sesión" onsubmit="event.preventDefault(); submitLogin();">
         <div class="form-group mb-3">
           <label class="form-label" for="login-email">
@@ -41,7 +73,6 @@
             autocomplete="email" inputmode="email"/>
           <div class="field-error" id="err-login-email" role="alert" aria-live="polite"></div>
         </div>
-
         <div class="form-group mb-4">
           <label class="form-label" for="login-password">
             Contraseña <span class="req" aria-label="obligatorio">*</span>
@@ -53,29 +84,11 @@
             autocomplete="current-password"/>
           <div class="field-error" id="err-login-password" role="alert" aria-live="polite"></div>
         </div>
-
-        <button type="submit" class="btn btn-primary" id="btn-login" aria-label="Ingresar al sistema">
+        <button type="submit" class="btn btn-primary" id="btn-login" aria-label="Ingresar al sistema" style="width:100%">
           Ingresar
         </button>
       </form>
     </div>
-
-    <!-- Consulta pública por tracking ID (LP-136) -->
-    <div class="public-track" aria-label="Consulta pública de estado de envío">
-      <p class="public-track-title">Consultar estado de un envío</p>
-      <p class="public-track-desc">Ingresá el tracking ID para ver el estado actual. No requiere cuenta.</p>
-      <div class="public-track-row">
-        <label for="public-track-input" class="visually-hidden">Tracking ID</label>
-        <input type="text" class="form-control" id="public-track-input"
-          placeholder="Ej: LT-00000001" aria-label="Tracking ID del envío"
-          autocomplete="off" style="text-transform:uppercase"/>
-        <button class="btn btn-ghost btn-sm" onclick="buscarPublico()" aria-label="Consultar envío">
-          Consultar
-        </button>
-      </div>
-      <div id="public-track-result" aria-live="polite"></div>
-    </div>
-
   </div>
 </div>
 
