@@ -51,7 +51,6 @@ TRANSICIONES_VALIDAS = {
 }
 
 
-
 def _generar_tracking_id(db: Session) -> str:
     """
     Genera el próximo tracking ID correlativo en formato LT-00000001.
@@ -232,9 +231,6 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
     )
 
 
-
-
-
 # ── GET /envios/{tracking_id} ─────────────────────────────────────────────────
 
 @router.get("/{tracking_id}", response_model=EnvioOutDetalle)
@@ -283,7 +279,6 @@ def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
         )
 
     return resultado
-
 
 
 # ── DELETE /envios/{tracking_id} ──────────────────────────────────────────────
