@@ -350,3 +350,9 @@ body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;font-s
 .admin-card .ac-label{font-size:.8rem;font-weight:700;color:var(--text)}
 .admin-card .ac-note{font-size:.7rem;color:var(--text-sub);margin-top:.3rem}
 
+
+/* ADMIN — alertas de registro */
+.alert-success{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:.65rem .9rem;font-size:.82rem;font-weight:600;color:#15803d;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.alert-success::before{content:"✓";flex-shrink:0}
+.alert-error{background:var(--danger-dim);border:1px solid rgba(185,28,28,.2);border-radius:var(--radius-sm);padding:.65rem .9rem;font-size:.82rem;font-weight:600;color:var(--danger);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.alert-error::before{content:"⚠";flex-shrink:0}

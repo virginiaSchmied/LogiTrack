@@ -4,7 +4,44 @@ from datetime import date, datetime
 from uuid import UUID
 import re
 
-from models import EstadoEnvioEnum, NivelPrioridadEnum
+from models import EstadoEnvioEnum, NivelPrioridadEnum, EstadoUsuarioEnum
+
+
+_ROLES_VALIDOS = {"OPERADOR", "SUPERVISOR", "ADMINISTRADOR"}
+
+
+# ── Usuarios ──────────────────────────────────────────────────────────────────
+
+class UsuarioCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    email:      str = Field(..., min_length=1, max_length=255, examples=["operador@logitrack.com"])
+    password:   str = Field(..., min_length=8, max_length=128, examples=["Segura1234!"])
+    rol_nombre: str = Field(..., examples=["OPERADOR"])
+
+    @field_validator("email")
+    @classmethod
+    def email_formato_valido(cls, v: str) -> str:
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("El email no tiene un formato válido")
+        return v.lower()
+
+    @field_validator("rol_nombre")
+    @classmethod
+    def rol_debe_ser_valido(cls, v: str) -> str:
+        if v.upper() not in _ROLES_VALIDOS:
+            raise ValueError("El rol debe ser OPERADOR, SUPERVISOR o ADMINISTRADOR")
+        return v.upper()
+
+
+class UsuarioOut(BaseModel):
+    uuid:       UUID
+    email:      str
+    nombre_rol: str
+    estado:     EstadoUsuarioEnum
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Autenticación ─────────────────────────────────────────────────────────────

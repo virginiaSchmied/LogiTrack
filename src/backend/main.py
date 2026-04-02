@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers import envios
 from routers import auth_router
+from routers import usuarios
 
 app = FastAPI(
     title="LogiTrack API",
@@ -22,6 +23,7 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth_router.router)
 app.include_router(envios.router)
+app.include_router(usuarios.router)
 
 
 @app.get("/", tags=["Health"])

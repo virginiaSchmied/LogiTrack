@@ -44,6 +44,7 @@ ROL_ADMIN_UUID      = uuid.UUID("11111111-0001-0001-0001-000000000003")
 
 USUARIO_OPERADOR_UUID   = uuid.UUID("22222222-0002-0002-0002-000000000001")
 USUARIO_SUPERVISOR_UUID = uuid.UUID("22222222-0002-0002-0002-000000000002")
+USUARIO_ADMIN_UUID      = uuid.UUID("22222222-0002-0002-0002-000000000003")
 
 
 def _seed_db(db):
@@ -70,6 +71,13 @@ def _seed_db(db):
             contrasena_hash=hash_password("test1234"),
             estado=models.EstadoUsuarioEnum.ALTA,
             rol_uuid=ROL_SUPERVISOR_UUID,
+        ),
+        models.Usuario(
+            uuid=USUARIO_ADMIN_UUID,
+            email="admin@test.com",
+            contrasena_hash=hash_password("test1234"),
+            estado=models.EstadoUsuarioEnum.ALTA,
+            rol_uuid=ROL_ADMIN_UUID,
         ),
     ]
     db.add_all(users)
@@ -111,4 +119,11 @@ def headers_operador():
 def headers_supervisor():
     """Headers HTTP con JWT de rol Supervisor."""
     token = _make_token(USUARIO_SUPERVISOR_UUID, "supervisor@test.com", "SUPERVISOR")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def headers_admin():
+    """Headers HTTP con JWT de rol Administrador."""
+    token = _make_token(USUARIO_ADMIN_UUID, "admin@test.com", "ADMINISTRADOR")
     return {"Authorization": f"Bearer {token}"}

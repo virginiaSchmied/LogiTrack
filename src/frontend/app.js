@@ -1389,6 +1389,104 @@ function escHtml(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ─── Alta de usuario (ADMINISTRADOR) ─────────────────────────────────────────
+function _setAdminFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'true');
+  if (error) { error.textContent = msg; error.classList.add('visible'); }
+}
+
+function _clearAdminFieldError(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+async function registrarUsuario() {
+  const emailEl = document.getElementById('nuevo-email');
+  const passEl  = document.getElementById('nuevo-password');
+  const rolEl   = document.getElementById('nuevo-rol');
+  const btn     = document.getElementById('btn-registrar-usuario');
+  const successEl = document.getElementById('admin-registro-success');
+  const errorEl   = document.getElementById('admin-registro-error');
+
+  // Limpiar mensajes anteriores
+  successEl.style.display = 'none';
+  errorEl.style.display   = 'none';
+  ['nuevo-email', 'nuevo-password', 'nuevo-rol'].forEach(_clearAdminFieldError);
+
+  // CA-5: validar campos obligatorios
+  let valid = true;
+  if (!emailEl.value.trim()) {
+    _setAdminFieldError('nuevo-email', 'El email es obligatorio.');
+    valid = false;
+  }
+  if (!passEl.value) {
+    _setAdminFieldError('nuevo-password', 'La contraseña es obligatoria.');
+    valid = false;
+  } else if (passEl.value.length < 8) {
+    _setAdminFieldError('nuevo-password', 'La contraseña debe tener al menos 8 caracteres.');
+    valid = false;
+  }
+  // CA-4: rol obligatorio
+  if (!rolEl.value) {
+    _setAdminFieldError('nuevo-rol', 'El rol es obligatorio.');
+    valid = false;
+  }
+  if (!valid) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Registrando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/usuarios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        email:      emailEl.value.trim(),
+        password:   passEl.value,
+        rol_nombre: rolEl.value,
+      }),
+    });
+
+    if (await handleApiError(res)) return;
+
+    if (res.status === 409) {
+      // CA-3: email ya registrado
+      const data = await res.json();
+      errorEl.textContent = data.detail || 'El email ya está registrado en el sistema.';
+      errorEl.style.display = '';
+      return;
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg = Array.isArray(data.detail)
+        ? data.detail.map(e => e.msg).join(' · ')
+        : (data.detail || 'Ocurrió un error al registrar el usuario.');
+      errorEl.textContent = msg;
+      errorEl.style.display = '';
+      return;
+    }
+
+    // CA-2: registro exitoso
+    const data = await res.json();
+    successEl.textContent = `Usuario ${escHtml(data.email)} registrado correctamente como ${escHtml(data.nombre_rol)}.`;
+    successEl.style.display = '';
+    document.getElementById('form-alta-usuario').reset();
+
+  } catch (err) {
+    console.error('Error al registrar usuario:', err);
+    errorEl.textContent = 'No se pudo conectar con el servidor. Verificá que el sistema esté disponible.';
+    errorEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Registrar usuario';
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Inicializar aplicación (verificar sesión)
@@ -1412,6 +1510,12 @@ document.addEventListener('DOMContentLoaded', () => {
   Object.keys(FIELDS).forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => clearFieldError(id));
+  });
+
+  // Limpiar errores del formulario admin al editar campos
+  ['nuevo-email', 'nuevo-password', 'nuevo-rol'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => _clearAdminFieldError(id));
   });
 
   // Búsqueda con debounce
