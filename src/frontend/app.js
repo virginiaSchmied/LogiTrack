@@ -218,7 +218,6 @@ async function submitLogin() {
 
     closeLoginModal();
 
-    onLoginSuccess(data);
 
   } catch (err) {
     console.error('Error al iniciar sesión:', err);
