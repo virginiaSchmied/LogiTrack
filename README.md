@@ -22,6 +22,7 @@ LogiTrack es un sistema web diseñado para centralizar y gestionar operaciones l
 | Backend | Python 3.11, FastAPI |
 | Base de datos | PostgreSQL |
 | Frontend | HTML5, CSS3, JavaScript (Vanilla) |
+| Machine Learning | scikit-learn (Decision Tree) |
 | Tests unitarios | pytest |
 | Tests E2E | Playwright |
 | Control de versiones | Git / GitHub |
@@ -32,26 +33,29 @@ LogiTrack es un sistema web diseñado para centralizar y gestionar operaciones l
 
 ```
 LogiTrack/
-├── docs/
-│   ├── architecture.md       # Decisiones de arquitectura
-│   └── setup.md              # Guía de instalación
 ├── src/
-│   ├── backend/              # API FastAPI
-│   │   ├── main.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   ├── database.py
+│   ├── backend/
+│   │   ├── main.py               # Entry point FastAPI
+│   │   ├── models.py             # Modelos ORM (SQLAlchemy)
+│   │   ├── schemas.py            # Schemas Pydantic
+│   │   ├── database.py           # Conexión y sesión de DB
+│   │   ├── ml_predictor.py       # Predicción de prioridad
 │   │   ├── routers/
-│   │   │   └── envios.py
-│   │   └── tests/            # Tests unitarios
+│   │   │   └── envios.py         # Todos los endpoints de envíos
+│   │   └── tests/                # Tests unitarios
 │   ├── db/
-│   │   └── migrations/       # Scripts SQL de migración
-│   └── frontend/             # Interfaz web
-│       ├── index.html
-│       ├── app.js
-│       └── style.css
-└── tests/
-    └── e2e/                  # Tests end-to-end con Playwright
+│   │   └── migrations/           # Scripts SQL de migración
+│   ├── frontend/
+│   │   ├── index.html
+│   │   ├── app.js
+│   │   └── style.css
+│   └── ml/
+│       ├── train.py              # Entrena Decision Tree y exporta .joblib
+│       ├── evaluar_modelos.py    # Compara Decision Tree, Random Forest, KNN
+│       ├── modelo_prioridad.joblib
+│       ├── dataset/
+│       └── reportes/             # PNGs de comparación de modelos
+└── CONTRIBUTING.md
 ```
 
 ---
