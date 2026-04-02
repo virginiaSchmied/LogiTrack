@@ -2,7 +2,6 @@ import uuid
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
@@ -14,6 +13,7 @@ from schemas import (
     EnvioUpdateContacto, EnvioUpdateOperativo, EnvioCambioEstado, DireccionOut,
 )
 from ml_predictor import predecir_prioridad
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/envios", tags=["Envíos"])
 
