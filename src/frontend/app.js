@@ -912,7 +912,7 @@ async function _ejecutarCambioEstado() {
   try {
     const res = await fetch(endpoint, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
