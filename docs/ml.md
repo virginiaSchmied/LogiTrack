@@ -40,7 +40,7 @@ La prioridad resulta de la combinación de ambas features en una matriz de 3×3:
 
 ### Datos reales
 
-Se insertaron 24 envíos en `scr/db/migrations/insert_datos_iniciales.sql` cubriendo los 9 cuadrantes de la matriz con prioridades correctamente etiquetadas. Los datos se exportaron a CSV con la siguiente query:
+Se insertaron 24 envíos en `src/db/migrations/insert_datos_iniciales.sql` cubriendo los 9 cuadrantes de la matriz con prioridades correctamente etiquetadas. Los datos se exportaron a CSV con la siguiente query:
 
 ```sql
 SELECT
@@ -93,7 +93,7 @@ Decision Tree y Random Forest obtuvieron métricas perfectas. Se eligió Decisio
 
 ## 4. Entrenamiento y métricas
 
-Implementado en `ml/train.py`. El script evalúa los 3 algoritmos sobre el 20% de test y luego reentrena el ganador sobre el **100% del dataset** antes de exportar el modelo final.
+Implementado en `ml/train.py`. El script evalúa los 3 algoritmos sobre el 20% de test y exporta directamente el modelo ganador **sin reentrenar sobre el dataset completo**. De esta forma, las métricas reportadas corresponden exactamente al modelo guardado en producción.
 
 **Métricas del modelo final (evaluadas sobre el 20% de test):**
 
@@ -117,9 +117,30 @@ python3 ml/train.py                    # semilla: RANDOM_STATE=42
 
 ---
 
-## 5. Exportación del modelo
+## 5. Exportación y validación del modelo
 
-El modelo fue serializado con `joblib.dump` al finalizar `train.py` y verificado cargándolo y realizando una predicción de prueba (prob=0.80, dias=2 → ALTA).
+El modelo fue serializado con `joblib.dump` al finalizar `train.py`. Al exportar, el script ejecuta automáticamente una tabla de validación con 9 casos fijos que cubren los 9 cuadrantes de la matriz de prioridad. Cada caso compara el resultado esperado con el predicho e indica si hay discrepancias:
+
+```
+============================================================
+VALIDACIÓN DEL MODELO (matriz de prioridad completa)
+============================================================
+  prob   dias    esperado    predicho    ok
+  ----   ----   ----------  ----------  ----
+  0.85      1        ALTA        ALTA     ✓
+  0.85      5        ALTA        ALTA     ✓
+  0.85     10       MEDIA       MEDIA     ✓
+  0.55      1        ALTA        ALTA     ✓
+  0.55      5       MEDIA       MEDIA     ✓
+  0.55     10       MEDIA       MEDIA     ✓
+  0.20      1       MEDIA       MEDIA     ✓
+  0.20      5        BAJA        BAJA     ✓
+  0.20     10        BAJA        BAJA     ✓
+============================================================
+Todos los casos correctos. El modelo reproduce la matriz de prioridad.
+```
+
+Los valores de entrada son fijos y no dependen de fechas, por lo que la validación es reproducible en cualquier momento.
 
 **Entregable:** `ml/modelo_prioridad.joblib` — versionado en el repositorio.
 
@@ -127,7 +148,7 @@ El modelo fue serializado con `joblib.dump` al finalizar `train.py` y verificado
 
 ## 6. Servicio de predicción 
 
-Implementado en `scr/backend/ml_predictor.py`:
+Implementado en `src/backend/ml_predictor.py`:
 
 - Carga el modelo una sola vez al iniciar la aplicación (singleton)
 - Expone `predecir_prioridad(probabilidad_retraso, dias_para_entrega) → str | None`
@@ -137,7 +158,7 @@ Implementado en `scr/backend/ml_predictor.py`:
 
 ## 7. Persistencia de prioridad
 
-Integrado en `scr/backend/routers/envios.py` (`POST /envios/`):
+Integrado en `src/backend/routers/envios.py` (`POST /envios/`):
 
 1. Si `probabilidad_retraso` está presente en el payload, calcula `dias_para_entrega = max(0, (fecha_entrega_estimada − date.today()).days)`
 2. Llama a `predecir_prioridad()` y persiste el resultado en `envio.prioridad`
@@ -148,7 +169,7 @@ Integrado en `scr/backend/routers/envios.py` (`POST /envios/`):
 
 ## 8. Visualización en el frontend
 
-Cambios en `scr/frontend/`:
+Cambios en `src/frontend/`:
 
 - Columna **Prioridad** en la tabla de listado con badge de color
 - Badge de prioridad en el modal de detalle del envío
@@ -167,7 +188,7 @@ Cambios en `scr/frontend/`:
 ## Estructura de archivos
 
 ```
-scr/
+src/
 ├── backend/
 │   ├── ml_predictor.py              # Servicio de predicción (LP-117)
 │   └── routers/

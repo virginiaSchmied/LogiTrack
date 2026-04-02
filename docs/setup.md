@@ -42,7 +42,7 @@ venv\Scripts\activate
 ## 3. Instalar dependencias del backend
 
 ```bash
-cd scr/backend
+cd src/backend
 pip install -r requirements.txt
 ```
 
@@ -66,23 +66,23 @@ GRANT ALL PRIVILEGES ON DATABASE logitrack TO logitrack_user;
 
 ### 4.2 Aplicar migraciones
 
-Ejecutar los scripts en el siguiente orden desde `scr/db/migrations/`:
+Ejecutar los scripts en el siguiente orden desde `src/db/migrations/`:
 
 ```bash
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_enums.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_tabla_usuario.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_tablas_rol_direccion.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_tabla_envio.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_tablas_eventos.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/create_indices.sql
-psql -U logitrack_user -d logitrack -f scr/db/migrations/insert_datos_iniciales.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_enums.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_tabla_usuario.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_tablas_rol_direccion.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_tabla_envio.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_tablas_eventos.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/create_indices.sql
+psql -U logitrack_user -d logitrack -f src/db/migrations/insert_datos_iniciales.sql
 ```
 
 ---
 
 ## 5. Variables de entorno
 
-Crear un archivo `.env` en `scr/backend/` con el siguiente contenido:
+Crear un archivo `.env` en `src/backend/` con el siguiente contenido:
 
 ```env
 DATABASE_URL=postgresql://logitrack_user:tu_password@localhost:5432/logitrack
@@ -95,7 +95,7 @@ DATABASE_URL=postgresql://logitrack_user:tu_password@localhost:5432/logitrack
 ## 6. Levantar el servidor backend
 
 ```bash
-cd scr/backend
+cd src/backend
 uvicorn main:app --reload
 ```
 
@@ -110,13 +110,13 @@ El servidor quedará disponible en:
 Abrir directamente en el navegador:
 
 ```
-scr/frontend/index.html
+src/frontend/index.html
 ```
 
 O servir con un servidor estático simple:
 
 ```bash
-cd scr/frontend
+cd src/frontend
 python -m http.server 3000
 # Acceder en http://localhost:3000
 ```
@@ -128,7 +128,7 @@ python -m http.server 3000
 ### Tests unitarios (pytest)
 
 ```bash
-cd scr/backend
+cd src/backend
 pytest
 
 # Con reporte HTML

@@ -35,7 +35,7 @@ LogiTrack/
 ├── docs/
 │   ├── architecture.md       # Decisiones de arquitectura
 │   └── setup.md              # Guía de instalación
-├── scr/
+├── src/
 │   ├── backend/              # API FastAPI
 │   │   ├── main.py
 │   │   ├── models.py
@@ -66,11 +66,11 @@ git clone https://github.com/virginiaSchmied/LogiTrack.git
 cd logitrack
 
 # 2. Instalar dependencias del backend
-cd scr/backend
+cd src/backend
 pip install -r requirements.txt
 
 # 3. Aplicar migraciones
-psql -U <usuario> -d <base> -f scr/db/migrations/create_tabla_usuario.sql
+psql -U <usuario> -d <base> -f src/db/migrations/create_tabla_usuario.sql
 # (ver setup.md para el orden completo)
 
 # 4. Levantar el servidor
@@ -83,7 +83,7 @@ uvicorn main:app --reload
 
 ```bash
 # Tests unitarios
-cd scr/backend
+cd src/backend
 pytest
 
 # Tests E2E

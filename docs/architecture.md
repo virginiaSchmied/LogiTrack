@@ -57,7 +57,7 @@ El recurso `envios` expone las operaciones:
 
 ### Motor: PostgreSQL
 
-Las migraciones se encuentran en `scr/db/migrations/` y deben ejecutarse en el siguiente orden:
+Las migraciones se encuentran en `src/db/migrations/` y deben ejecutarse en el siguiente orden:
 
 1. `create_enums.sql` — Tipos enumerados (estados, roles, etc.)
 2. `create_tabla_usuario.sql` — Tabla de usuarios
@@ -85,7 +85,7 @@ Interfaz web liviana desarrollada con tecnologías nativas del navegador (sin fr
 
 ### Tests unitarios (pytest)
 
-Ubicados en `scr/backend/tests/`. Cubren los endpoints principales del backend con una base de datos de prueba configurada en `conftest.py`.
+Ubicados en `src/backend/tests/`. Cubren los endpoints principales del backend con una base de datos de prueba configurada en `conftest.py`.
 
 ### Tests E2E (Playwright)
 
@@ -104,9 +104,9 @@ El módulo de Machine Learning clasifica automáticamente la prioridad de cada e
 
 | Módulo | Responsabilidad |
 |---|---|
-| `scr/ml/train.py` | Entrenamiento, evaluación y exportación del modelo |
-| `scr/ml/modelo_prioridad.joblib` | Modelo serializado (versionado) |
-| `scr/backend/ml_predictor.py` | Servicio de predicción (singleton) |
+| `src/ml/train.py` | Entrenamiento, evaluación y exportación del modelo |
+| `src/ml/modelo_prioridad.joblib` | Modelo serializado (versionado) |
+| `src/backend/ml_predictor.py` | Servicio de predicción (singleton) |
 
 La predicción se ejecuta automáticamente al crear un envío si se provee `probabilidad_retraso`. Ver [docs/ml.md](ml.md) para el detalle completo.
 

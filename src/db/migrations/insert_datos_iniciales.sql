@@ -1,0 +1,1168 @@
+-- ==============================================
+-- USUARIOS
+-- ==============================================
+INSERT INTO usuario (uuid, email, contrasena_hash, estado, rol_uuid) VALUES
+    (
+        'b1b2c3d4-0002-0002-0002-000000000001',
+        'admin@logitrack.com',
+        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        'ALTA',
+        '9438fc9c-b584-4873-8f00-694c4d8c4b6c'
+    ),
+    (
+        'b1b2c3d4-0002-0002-0002-000000000002',
+        'supervisor@logitrack.com',
+        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        'ALTA',
+        '10974788-0589-4a53-bb6a-c5bce8e511ec'
+    ),
+    (
+        'b1b2c3d4-0002-0002-0002-000000000003',
+        'operador@logitrack.com',
+        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        'ALTA',
+        '96aa365b-d4b1-45a1-a9f5-3310c00b364b'
+    ),
+    (
+        'b1b2c3d4-0002-0002-0002-000000000004',
+        'operador2@logitrack.com',
+        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        'BAJA',
+        '96aa365b-d4b1-45a1-a9f5-3310c00b364b'
+    )
+ON CONFLICT (uuid) DO NOTHING;
+
+-- ==============================================
+-- DIRECCIONES
+-- ==============================================
+INSERT INTO direccion (id, calle, numero, ciudad, provincia, codigo_postal) VALUES
+    ('c1000000-0003-0003-0003-000000000001', 'Av. Corrientes',  '1234', 'Buenos Aires', 'CABA',         '1043'),
+    ('c1000000-0003-0003-0003-000000000002', 'Av. Santa Fe',    '5678', 'Buenos Aires', 'CABA',         '1425'),
+    ('c1000000-0003-0003-0003-000000000003', 'Belgrano',         '890', 'Córdoba',      'Córdoba',      '5000'),
+    ('c1000000-0003-0003-0003-000000000004', 'San Martín',       '321', 'Rosario',      'Santa Fe',     '2000'),
+    ('c1000000-0003-0003-0003-000000000005', 'Mitre',            '456', 'Mendoza',      'Mendoza',      '5500'),
+    ('c1000000-0003-0003-0003-000000000006', 'Rivadavia',        '789', 'La Plata',     'Buenos Aires', '1900')
+ON CONFLICT (id) DO NOTHING;
+
+-- ==============================================
+-- Limpiar datos de seed anteriores si existen
+-- ==============================================
+DELETE FROM evento_de_envio
+WHERE envio_uuid IN (
+    SELECT uuid FROM envio WHERE tracking_id LIKE 'LT-00000%'
+);
+DELETE FROM envio WHERE tracking_id LIKE 'LT-00000%';
+
+-- ==============================================
+-- ENVÍOS (15 registros)
+-- Se insertan con su estado final.
+-- Los eventos de abajo reconstruyen la historia de cada uno.
+--
+-- Matriz de prioridad (prob_retraso × días_para_entrega):
+--
+--                  ≤ 2 días   3-7 días   > 7 días
+--   prob > 0.70  →  ALTA      ALTA       MEDIA
+--   0.40-0.70    →  ALTA      MEDIA      MEDIA
+--   prob < 0.40  →  MEDIA     BAJA       BAJA
+--
+-- Abreviaciones de direcciones:
+--   d1 = Av. Corrientes 1234, CABA
+--   d2 = Av. Santa Fe 5678, CABA
+--   d3 = Belgrano 890, Córdoba
+--   d4 = San Martín 321, Rosario
+--   d5 = Mitre 456, Mendoza
+--   d6 = Rivadavia 789, La Plata
+-- ==============================================
+INSERT INTO envio (
+    uuid, tracking_id, remitente, destinatario,
+    probabilidad_retraso, prioridad, estado,
+    fecha_entrega_estimada,
+    direccion_origen_id, direccion_destino_id
+) VALUES
+    -- 1. prob < 0.40, > 7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000001', 'LT-10000001',
+     'Ana Rodríguez', 'Bruno Pérez',
+     0.15, 'BAJA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '10 days',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 2. prob > 0.70, 3-7 días → ALTA
+    ('ee000000-0000-0000-0000-000000000002', 'LT-10000002',
+     'Carla Méndez', 'Diego Suárez',
+     0.80, 'ALTA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 3. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000003', 'LT-10000003',
+     'Elena Torres', 'Franco Giménez',
+     0.45, 'MEDIA', 'EN_DEPOSITO',
+     CURRENT_DATE + INTERVAL '7 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 4. prob < 0.40, > 7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000004', 'LT-10000004',
+     'Graciela Ruiz', 'Hernán Castro',
+     0.30, 'BAJA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '8 days',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000002'),
+
+    -- 5. prob > 0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000005', 'LT-10000005',
+     'Ivana Morales', 'Jorge Díaz',
+     0.75, 'ALTA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 6. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000006', 'LT-10000006',
+     'Karina López', 'Leonardo Sosa',
+     0.55, 'MEDIA', 'EN_SUCURSAL',
+     CURRENT_DATE + INTERVAL '5 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 7. 0.40-0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000007', 'LT-10000007',
+     'Marcela Vega', 'Nicolás Blanco',
+     0.40, 'ALTA', 'EN_DISTRIBUCION',
+     CURRENT_DATE + INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 8. prob > 0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000008', 'LT-10000008',
+     'Olga Ramos', 'Pablo Ortega',
+     0.90, 'ALTA', 'EN_DISTRIBUCION',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 9. prob < 0.40, > 7 días → BAJA (entregado, fecha en el pasado)
+    ('ee000000-0000-0000-0000-000000000009', 'LT-10000009',
+     'Quintín Paz', 'Rosa Herrera',
+     0.20, 'BAJA', 'ENTREGADO',
+     CURRENT_DATE - INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 10. 0.40-0.70, ≤ 2 días → ALTA (entregado, fecha en el pasado)
+    ('ee000000-0000-0000-0000-000000000010', 'LT-10000010',
+     'Silvia Campos', 'Tomás Navarro',
+     0.65, 'ALTA', 'ENTREGADO',
+     CURRENT_DATE - INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 11. prob > 0.70, ≤ 2 días → ALTA (retrasado en tránsito)
+    ('ee000000-0000-0000-0000-000000000011', 'LT-10000011',
+     'Úrsula Bravo', 'Víctor Serrano',
+     0.72, 'ALTA', 'RETRASADO',
+     CURRENT_DATE + INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000002'),
+
+    -- 12. prob < 0.40, 3-7 días → BAJA (bloqueado en sucursal)
+    ('ee000000-0000-0000-0000-000000000012', 'LT-10000012',
+     'Walter Acuña', 'Ximena Fuentes',
+     0.35, 'BAJA', 'BLOQUEADO',
+     CURRENT_DATE + INTERVAL '4 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 13. 0.40-0.70, > 7 días → MEDIA (cancelado desde EN_TRANSITO)
+    ('ee000000-0000-0000-0000-000000000013', 'LT-10000013',
+     'Yanina Paredes', 'Zacarías Molina',
+     0.60, 'MEDIA', 'CANCELADO',
+     CURRENT_DATE + INTERVAL '15 days',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 14. prob > 0.70, 3-7 días → ALTA (cancelado directo desde REGISTRADO)
+    ('ee000000-0000-0000-0000-000000000014', 'LT-10000014',
+     'Adrián Benítez', 'Belén Coronel',
+     0.85, 'ALTA', 'CANCELADO',
+     CURRENT_DATE + INTERVAL '5 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 15. prob < 0.40, > 7 días → BAJA (cancelado y luego eliminado)
+    ('ee000000-0000-0000-0000-000000000015', 'LT-10000015',
+     'Cecilia Delgado', 'Damián Esquivel',
+     0.25, 'BAJA', 'ELIMINADO',
+     CURRENT_DATE + INTERVAL '20 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000001')
+
+ON CONFLICT (uuid) DO NOTHING;
+
+-- ==============================================
+-- EVENTOS DE ENVÍO
+-- Cada bloque reconstruye la historia completa de un envío.
+--
+-- Regla de ubicacion_actual_id:
+--   - EN_DEPOSITO  → obligatoria (depósito en ciudad de origen)
+--   - EN_SUCURSAL  → obligatoria (sucursal en ciudad de destino)
+--   - ENTREGADO    → obligatoria (dirección de entrega = destino)
+--   - RETRASADO    → opcional (se registra la última ubicación conocida)
+--   - BLOQUEADO    → opcional (se registra la sucursal donde quedó bloqueado)
+--   - EN_TRANSITO, EN_DISTRIBUCION, CANCELADO, ELIMINADO → NULL
+-- ==============================================
+INSERT INTO evento_de_envio (
+    uuid, accion, estado_inicial, estado_final,
+    ubicacion_actual_id, usuario_uuid, envio_uuid, fecha_hora
+) VALUES
+
+    -- ── LT-10000001: REGISTRADO ───────────────────────────────────────────────
+    ('ff000000-0000-0000-0000-000000000001', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000001',
+     NOW() - INTERVAL '5 hours'),
+
+    -- ── LT-10000002: REGISTRADO ───────────────────────────────────────────────
+    ('ff000000-0000-0000-0000-000000000002', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000002',
+     NOW() - INTERVAL '2 hours'),
+
+    -- ── LT-10000003: EN_DEPOSITO (origen=d3 Córdoba) ─────────────────────────
+    ('ff000000-0000-0000-0000-000000000003', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000003',
+     NOW() - INTERVAL '3 days'),
+
+    ('ff000000-0000-0000-0000-000000000004', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',   -- depósito Córdoba
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000003',
+     NOW() - INTERVAL '2 days 6 hours'),
+
+    -- ── LT-10000004: EN_TRANSITO (origen=d4 Rosario → destino=d2 CABA) ───────
+    ('ff000000-0000-0000-0000-000000000005', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000004',
+     NOW() - INTERVAL '5 days'),
+
+    ('ff000000-0000-0000-0000-000000000006', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000004',   -- depósito Rosario
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000004',
+     NOW() - INTERVAL '4 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000007', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000004',
+     NOW() - INTERVAL '2 days 12 hours'),
+
+    -- ── LT-10000005: EN_TRANSITO (origen=d5 Mendoza → destino=d4 Rosario) ────
+    ('ff000000-0000-0000-0000-000000000008', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000005',
+     NOW() - INTERVAL '6 days'),
+
+    ('ff000000-0000-0000-0000-000000000009', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000005',   -- depósito Mendoza
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000005',
+     NOW() - INTERVAL '5 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000010', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000005',
+     NOW() - INTERVAL '3 days 12 hours'),
+
+    -- ── LT-10000006: EN_SUCURSAL (origen=d6 La Plata → destino=d3 Córdoba) ───
+    ('ff000000-0000-0000-0000-000000000011', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000006',
+     NOW() - INTERVAL '7 days'),
+
+    ('ff000000-0000-0000-0000-000000000012', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000006',   -- depósito La Plata
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000006',
+     NOW() - INTERVAL '6 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000013', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000006',
+     NOW() - INTERVAL '4 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000014', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000003',   -- sucursal Córdoba (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000006',
+     NOW() - INTERVAL '1 day 6 hours'),
+
+    -- ── LT-10000007: EN_DISTRIBUCION (origen=d1 CABA → destino=d5 Mendoza) ───
+    ('ff000000-0000-0000-0000-000000000015', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000007',
+     NOW() - INTERVAL '8 days'),
+
+    ('ff000000-0000-0000-0000-000000000016', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',   -- depósito CABA
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000007',
+     NOW() - INTERVAL '7 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000017', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000007',
+     NOW() - INTERVAL '5 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000018', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000005',   -- sucursal Mendoza (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000007',
+     NOW() - INTERVAL '2 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000019', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000007',
+     NOW() - INTERVAL '12 hours'),
+
+    -- ── LT-10000008: EN_DISTRIBUCION (origen=d2 CABA → destino=d6 La Plata) ──
+    ('ff000000-0000-0000-0000-000000000020', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000008',
+     NOW() - INTERVAL '6 days'),
+
+    ('ff000000-0000-0000-0000-000000000021', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000002',   -- depósito CABA
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000008',
+     NOW() - INTERVAL '5 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000022', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000008',
+     NOW() - INTERVAL '3 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000023', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000006',   -- sucursal La Plata (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000008',
+     NOW() - INTERVAL '1 day 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000024', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000008',
+     NOW() - INTERVAL '4 hours'),
+
+    -- ── LT-10000009: ENTREGADO (origen=d3 Córdoba → destino=d4 Rosario) ──────
+    ('ff000000-0000-0000-0000-000000000025', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '12 days'),
+
+    ('ff000000-0000-0000-0000-000000000026', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',   -- depósito Córdoba
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '11 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000027', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '9 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000028', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000004',   -- sucursal Rosario (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '6 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000029', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '4 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000030', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'ENTREGADO',
+     'c1000000-0003-0003-0003-000000000004',   -- entrega en Rosario (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000009',
+     NOW() - INTERVAL '2 days 6 hours'),
+
+    -- ── LT-10000010: ENTREGADO (origen=d4 Rosario → destino=d1 CABA) ─────────
+    ('ff000000-0000-0000-0000-000000000031', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '10 days'),
+
+    ('ff000000-0000-0000-0000-000000000032', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000004',   -- depósito Rosario
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '9 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000033', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '7 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000034', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000001',   -- sucursal CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '4 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000035', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '2 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000036', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'ENTREGADO',
+     'c1000000-0003-0003-0003-000000000001',   -- entrega en CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000010',
+     NOW() - INTERVAL '1 day 6 hours'),
+
+    -- ── LT-10000011: RETRASADO (origen=d5 Mendoza → destino=d2 CABA) ─────────
+    ('ff000000-0000-0000-0000-000000000037', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000011',
+     NOW() - INTERVAL '8 days'),
+
+    ('ff000000-0000-0000-0000-000000000038', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000005',   -- depósito Mendoza
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000011',
+     NOW() - INTERVAL '7 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000039', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000011',
+     NOW() - INTERVAL '5 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000040', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'RETRASADO',
+     'c1000000-0003-0003-0003-000000000005',   -- última ubicación conocida (Mendoza)
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor registra la excepción
+     'ee000000-0000-0000-0000-000000000011',
+     NOW() - INTERVAL '2 days 6 hours'),
+
+    -- ── LT-10000012: BLOQUEADO (origen=d6 La Plata → destino=d5 Mendoza) ─────
+    ('ff000000-0000-0000-0000-000000000041', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000012',
+     NOW() - INTERVAL '9 days'),
+
+    ('ff000000-0000-0000-0000-000000000042', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000006',   -- depósito La Plata
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000012',
+     NOW() - INTERVAL '8 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000043', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000012',
+     NOW() - INTERVAL '6 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000044', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000005',   -- sucursal Mendoza (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000012',
+     NOW() - INTERVAL '3 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000045', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'BLOQUEADO',
+     'c1000000-0003-0003-0003-000000000005',   -- sucursal Mendoza donde quedó bloqueado
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor registra la excepción
+     'ee000000-0000-0000-0000-000000000012',
+     NOW() - INTERVAL '1 day 6 hours'),
+
+    -- ── LT-10000013: CANCELADO (origen=d1 CABA → destino=d6 La Plata) ────────
+    ('ff000000-0000-0000-0000-000000000046', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000013',
+     NOW() - INTERVAL '4 days'),
+
+    ('ff000000-0000-0000-0000-000000000047', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',   -- depósito CABA
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000013',
+     NOW() - INTERVAL '3 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000048', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000013',
+     NOW() - INTERVAL '2 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000049', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'CANCELADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor cancela
+     'ee000000-0000-0000-0000-000000000013',
+     NOW() - INTERVAL '1 day 6 hours'),
+
+    -- ── LT-10000014: CANCELADO directo desde REGISTRADO ──────────────────────
+    --    (cliente canceló antes de que se procesara el envío)
+    ('ff000000-0000-0000-0000-000000000050', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000014',
+     NOW() - INTERVAL '2 days'),
+
+    ('ff000000-0000-0000-0000-000000000051', 'CAMBIO_ESTADO', 'REGISTRADO', 'CANCELADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor cancela a pedido del cliente
+     'ee000000-0000-0000-0000-000000000014',
+     NOW() - INTERVAL '1 day 18 hours'),
+
+    -- ── LT-10000015: ELIMINADO (origen=d3 Córdoba → destino=d1 CABA) ─────────
+    ('ff000000-0000-0000-0000-000000000052', 'CREACION', NULL, 'REGISTRADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000015',
+     NOW() - INTERVAL '10 days'),
+
+    ('ff000000-0000-0000-0000-000000000053', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',   -- depósito Córdoba
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000015',
+     NOW() - INTERVAL '9 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000054', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000015',
+     NOW() - INTERVAL '7 days 12 hours'),
+
+    ('ff000000-0000-0000-0000-000000000055', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'CANCELADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor cancela
+     'ee000000-0000-0000-0000-000000000015',
+     NOW() - INTERVAL '5 days 6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000056', 'ELIMINACION', 'CANCELADO', 'ELIMINADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor elimina
+     'ee000000-0000-0000-0000-000000000015',
+     NOW() - INTERVAL '4 days 6 hours')
+
+ON CONFLICT (uuid) DO NOTHING;
+
+-- ==============================================
+-- ENVÍOS (adicionales — IDs 16 al 40)
+-- ==============================================
+INSERT INTO envio (
+    uuid, tracking_id, remitente, destinatario,
+    probabilidad_retraso, prioridad, estado,
+    fecha_entrega_estimada,
+    direccion_origen_id, direccion_destino_id
+) VALUES
+    -- 16. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000016', 'LT-10000016',
+     'Fernando Ruiz', 'Patricia Molina',
+     0.50, 'MEDIA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '6 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 17. prob > 0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000017', 'LT-10000017',
+     'Gonzalo Castro', 'Inés Paredes',
+     0.92, 'ALTA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 18. prob < 0.40, > 7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000018', 'LT-10000018',
+     'Humberto Díaz', 'Jimena Quiroga',
+     0.22, 'BAJA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '14 days',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 19. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000019', 'LT-10000019',
+     'Ignacio Sánchez', 'Laura Gutiérrez',
+     0.67, 'MEDIA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '4 days',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000002'),
+
+    -- 20. prob > 0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000020', 'LT-10000020',
+     'Juliana Ramírez', 'Kevin Espinoza',
+     0.78, 'ALTA', 'REGISTRADO',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 21. prob < 0.40, 3-7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000021', 'LT-10000021',
+     'Liliana Montoya', 'Mario Vargas',
+     0.33, 'BAJA', 'EN_DEPOSITO',
+     CURRENT_DATE + INTERVAL '5 days',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 22. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000022', 'LT-10000022',
+     'Norberto Vidal', 'Ofelia Delgado',
+     0.58, 'MEDIA', 'EN_DEPOSITO',
+     CURRENT_DATE + INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 23. prob > 0.70, 3-7 días → ALTA
+    ('ee000000-0000-0000-0000-000000000023', 'LT-10000023',
+     'Patricio Ibáñez', 'Queila Ramos',
+     0.81, 'ALTA', 'EN_DEPOSITO',
+     CURRENT_DATE + INTERVAL '7 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 24. prob < 0.40, > 7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000024', 'LT-10000024',
+     'Rodolfo Silva', 'Sandra Medina',
+     0.12, 'BAJA', 'EN_DEPOSITO',
+     CURRENT_DATE + INTERVAL '9 days',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000002'),
+
+    -- 25. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000025', 'LT-10000025',
+     'Sebastián Acosta', 'Valentina Cruz',
+     0.44, 'MEDIA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '6 days',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 26. prob > 0.70, 3-7 días → ALTA
+    ('ee000000-0000-0000-0000-000000000026', 'LT-10000026',
+     'Tamara Herrera', 'Umberto Ponce',
+     0.89, 'ALTA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 27. prob < 0.40, > 7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000027', 'LT-10000027',
+     'Vanesa Flores', 'Ariel Navarrete',
+     0.27, 'BAJA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '8 days',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 28. 0.40-0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000028', 'LT-10000028',
+     'Beatriz Aguirre', 'César Peralta',
+     0.63, 'ALTA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 29. prob > 0.70, 3-7 días → ALTA
+    ('ee000000-0000-0000-0000-000000000029', 'LT-10000029',
+     'Diana Lorca', 'Ezequiel Santana',
+     0.74, 'ALTA', 'EN_TRANSITO',
+     CURRENT_DATE + INTERVAL '5 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 30. prob < 0.40, 3-7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000030', 'LT-10000030',
+     'Fabiana Ojeda', 'Gonzalo Vera',
+     0.36, 'BAJA', 'EN_SUCURSAL',
+     CURRENT_DATE + INTERVAL '4 days',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 31. prob > 0.70, 3-7 días → ALTA
+    ('ee000000-0000-0000-0000-000000000031', 'LT-10000031',
+     'Horacio Benítez', 'Isabella Moreno',
+     0.71, 'ALTA', 'EN_SUCURSAL',
+     CURRENT_DATE + INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000002'),
+
+    -- 32. 0.40-0.70, 3-7 días → MEDIA
+    ('ee000000-0000-0000-0000-000000000032', 'LT-10000032',
+     'Javier Estrada', 'Karen Guzmán',
+     0.48, 'MEDIA', 'EN_SUCURSAL',
+     CURRENT_DATE + INTERVAL '6 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 33. prob > 0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000033', 'LT-10000033',
+     'Leandro Paredes', 'Marta Salinas',
+     0.82, 'ALTA', 'EN_DISTRIBUCION',
+     CURRENT_DATE + INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 34. 0.40-0.70, ≤ 2 días → ALTA
+    ('ee000000-0000-0000-0000-000000000034', 'LT-10000034',
+     'Nicolás Herrero', 'Ofelia Tejeda',
+     0.55, 'ALTA', 'EN_DISTRIBUCION',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 35. prob < 0.40, 3-7 días → BAJA
+    ('ee000000-0000-0000-0000-000000000035', 'LT-10000035',
+     'Paula Leiva', 'Rafael Ríos',
+     0.19, 'BAJA', 'EN_DISTRIBUCION',
+     CURRENT_DATE + INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000003', 'c1000000-0003-0003-0003-000000000005'),
+
+    -- 36. 0.40-0.70, > 7 días → MEDIA (entregado, fecha en el pasado)
+    ('ee000000-0000-0000-0000-000000000036', 'LT-10000036',
+     'Sabrina Orozco', 'Teodoro Pinto',
+     0.43, 'MEDIA', 'ENTREGADO',
+     CURRENT_DATE - INTERVAL '3 days',
+     'c1000000-0003-0003-0003-000000000004', 'c1000000-0003-0003-0003-000000000006'),
+
+    -- 37. prob > 0.70, 3-7 días → ALTA (entregado, fecha en el pasado)
+    ('ee000000-0000-0000-0000-000000000037', 'LT-10000037',
+     'Ulises Cabrera', 'Viviana Salas',
+     0.76, 'ALTA', 'ENTREGADO',
+     CURRENT_DATE - INTERVAL '1 day',
+     'c1000000-0003-0003-0003-000000000005', 'c1000000-0003-0003-0003-000000000001'),
+
+    -- 38. prob < 0.40, > 7 días → BAJA (entregado, fecha en el pasado)
+    ('ee000000-0000-0000-0000-000000000038', 'LT-10000038',
+     'Wanda Fuentes', 'Yamil Morales',
+     0.28, 'BAJA', 'ENTREGADO',
+     CURRENT_DATE - INTERVAL '4 days',
+     'c1000000-0003-0003-0003-000000000006', 'c1000000-0003-0003-0003-000000000003'),
+
+    -- 39. 0.40-0.70, ≤ 2 días → ALTA (retrasado desde EN_DISTRIBUCION)
+    ('ee000000-0000-0000-0000-000000000039', 'LT-10000039',
+     'Zulema Castro', 'Alberto Pereyra',
+     0.68, 'ALTA', 'RETRASADO',
+     CURRENT_DATE + INTERVAL '2 days',
+     'c1000000-0003-0003-0003-000000000001', 'c1000000-0003-0003-0003-000000000004'),
+
+    -- 40. 0.40-0.70, > 7 días → MEDIA (cancelado desde EN_SUCURSAL)
+    ('ee000000-0000-0000-0000-000000000040', 'LT-10000040',
+     'Brenda Torres', 'Claudio Navarro',
+     0.55, 'MEDIA', 'CANCELADO',
+     CURRENT_DATE + INTERVAL '10 days',
+     'c1000000-0003-0003-0003-000000000002', 'c1000000-0003-0003-0003-000000000005')
+
+ON CONFLICT (uuid) DO NOTHING;
+
+-- ==============================================
+-- EVENTOS DE ENVÍO (adicionales — envíos 16 al 40)
+-- ==============================================
+INSERT INTO evento_de_envio (
+    uuid, accion, estado_inicial, estado_final,
+    ubicacion_actual_id, usuario_uuid, envio_uuid, fecha_hora
+) VALUES
+
+    -- ── LT-10000016 al 20: REGISTRADO ────────────────────────────────────────
+    ('ff000000-0000-0000-0000-000000000057', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000016', NOW() - INTERVAL '8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000058', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000017', NOW() - INTERVAL '6 hours'),
+
+    ('ff000000-0000-0000-0000-000000000059', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000018', NOW() - INTERVAL '4 hours'),
+
+    ('ff000000-0000-0000-0000-000000000060', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000019', NOW() - INTERVAL '3 hours'),
+
+    ('ff000000-0000-0000-0000-000000000061', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000020', NOW() - INTERVAL '1 hour'),
+
+    -- ── LT-10000021: EN_DEPOSITO (origen=d1 CABA) ────────────────────────────
+    ('ff000000-0000-0000-0000-000000000062', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000021', NOW() - INTERVAL '2 days'),
+
+    ('ff000000-0000-0000-0000-000000000063', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000021', NOW() - INTERVAL '1 day 8 hours'),
+
+    -- ── LT-10000022: EN_DEPOSITO (origen=d2 CABA) ────────────────────────────
+    ('ff000000-0000-0000-0000-000000000064', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000022', NOW() - INTERVAL '3 days'),
+
+    ('ff000000-0000-0000-0000-000000000065', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000002',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000022', NOW() - INTERVAL '2 days 8 hours'),
+
+    -- ── LT-10000023: EN_DEPOSITO (origen=d3 Córdoba) ─────────────────────────
+    ('ff000000-0000-0000-0000-000000000066', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000023', NOW() - INTERVAL '4 days'),
+
+    ('ff000000-0000-0000-0000-000000000067', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000023', NOW() - INTERVAL '3 days 8 hours'),
+
+    -- ── LT-10000024: EN_DEPOSITO (origen=d4 Rosario) ─────────────────────────
+    ('ff000000-0000-0000-0000-000000000068', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000024', NOW() - INTERVAL '2 days'),
+
+    ('ff000000-0000-0000-0000-000000000069', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000004',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000024', NOW() - INTERVAL '1 day 10 hours'),
+
+    -- ── LT-10000025: EN_TRANSITO (origen=d5 Mendoza → destino=d1 CABA) ───────
+    ('ff000000-0000-0000-0000-000000000070', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000025', NOW() - INTERVAL '5 days'),
+
+    ('ff000000-0000-0000-0000-000000000071', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000005',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000025', NOW() - INTERVAL '4 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000072', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000025', NOW() - INTERVAL '2 days 14 hours'),
+
+    -- ── LT-10000026: EN_TRANSITO (origen=d6 La Plata → destino=d4 Rosario) ───
+    ('ff000000-0000-0000-0000-000000000073', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000026', NOW() - INTERVAL '4 days'),
+
+    ('ff000000-0000-0000-0000-000000000074', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000006',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000026', NOW() - INTERVAL '3 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000075', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000026', NOW() - INTERVAL '1 day 16 hours'),
+
+    -- ── LT-10000027: EN_TRANSITO (origen=d1 CABA → destino=d3 Córdoba) ───────
+    ('ff000000-0000-0000-0000-000000000076', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000027', NOW() - INTERVAL '6 days'),
+
+    ('ff000000-0000-0000-0000-000000000077', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000027', NOW() - INTERVAL '5 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000078', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000027', NOW() - INTERVAL '3 days 14 hours'),
+
+    -- ── LT-10000028: EN_TRANSITO (origen=d2 CABA → destino=d5 Mendoza) ───────
+    ('ff000000-0000-0000-0000-000000000079', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000028', NOW() - INTERVAL '4 days'),
+
+    ('ff000000-0000-0000-0000-000000000080', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000002',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000028', NOW() - INTERVAL '3 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000081', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000028', NOW() - INTERVAL '1 day 18 hours'),
+
+    -- ── LT-10000029: EN_TRANSITO (origen=d3 Córdoba → destino=d1 CABA) ───────
+    ('ff000000-0000-0000-0000-000000000082', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000029', NOW() - INTERVAL '5 days'),
+
+    ('ff000000-0000-0000-0000-000000000083', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000029', NOW() - INTERVAL '4 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000084', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000029', NOW() - INTERVAL '2 days 16 hours'),
+
+    -- ── LT-10000030: EN_SUCURSAL (origen=d4 Rosario → destino=d6 La Plata) ───
+    ('ff000000-0000-0000-0000-000000000085', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000030', NOW() - INTERVAL '7 days'),
+
+    ('ff000000-0000-0000-0000-000000000086', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000004',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000030', NOW() - INTERVAL '6 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000087', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000030', NOW() - INTERVAL '4 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000088', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000006',   -- sucursal La Plata (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000030', NOW() - INTERVAL '1 day 8 hours'),
+
+    -- ── LT-10000031: EN_SUCURSAL (origen=d5 Mendoza → destino=d2 CABA) ───────
+    ('ff000000-0000-0000-0000-000000000089', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000031', NOW() - INTERVAL '8 days'),
+
+    ('ff000000-0000-0000-0000-000000000090', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000005',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000031', NOW() - INTERVAL '7 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000091', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000031', NOW() - INTERVAL '5 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000092', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000002',   -- sucursal CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000031', NOW() - INTERVAL '2 days 8 hours'),
+
+    -- ── LT-10000032: EN_SUCURSAL (origen=d6 La Plata → destino=d1 CABA) ──────
+    ('ff000000-0000-0000-0000-000000000093', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000032', NOW() - INTERVAL '6 days'),
+
+    ('ff000000-0000-0000-0000-000000000094', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000006',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000032', NOW() - INTERVAL '5 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000095', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000032', NOW() - INTERVAL '3 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000096', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000001',   -- sucursal CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000032', NOW() - INTERVAL '12 hours'),
+
+    -- ── LT-10000033: EN_DISTRIBUCION (origen=d1 CABA → destino=d3 Córdoba) ───
+    ('ff000000-0000-0000-0000-000000000097', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000033', NOW() - INTERVAL '7 days'),
+
+    ('ff000000-0000-0000-0000-000000000098', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000033', NOW() - INTERVAL '6 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000099', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000033', NOW() - INTERVAL '4 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000100', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000003',   -- sucursal Córdoba (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000033', NOW() - INTERVAL '2 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000101', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000033', NOW() - INTERVAL '6 hours'),
+
+    -- ── LT-10000034: EN_DISTRIBUCION (origen=d2 CABA → destino=d4 Rosario) ───
+    ('ff000000-0000-0000-0000-000000000102', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000034', NOW() - INTERVAL '6 days'),
+
+    ('ff000000-0000-0000-0000-000000000103', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000002',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000034', NOW() - INTERVAL '5 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000104', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000034', NOW() - INTERVAL '3 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000105', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000004',   -- sucursal Rosario (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000034', NOW() - INTERVAL '1 day 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000106', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000034', NOW() - INTERVAL '8 hours'),
+
+    -- ── LT-10000035: EN_DISTRIBUCION (origen=d3 Córdoba → destino=d5 Mendoza)
+    ('ff000000-0000-0000-0000-000000000107', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000035', NOW() - INTERVAL '8 days'),
+
+    ('ff000000-0000-0000-0000-000000000108', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000003',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000035', NOW() - INTERVAL '7 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000109', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000035', NOW() - INTERVAL '5 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000110', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000005',   -- sucursal Mendoza (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000035', NOW() - INTERVAL '2 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000111', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000035', NOW() - INTERVAL '10 hours'),
+
+    -- ── LT-10000036: ENTREGADO (origen=d4 Rosario → destino=d6 La Plata) ─────
+    ('ff000000-0000-0000-0000-000000000112', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '14 days'),
+
+    ('ff000000-0000-0000-0000-000000000113', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000004',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '13 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000114', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '11 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000115', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000006',   -- sucursal La Plata (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '8 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000116', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '5 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000117', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'ENTREGADO',
+     'c1000000-0003-0003-0003-000000000006',   -- entrega en La Plata (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000036', NOW() - INTERVAL '3 days 6 hours'),
+
+    -- ── LT-10000037: ENTREGADO (origen=d5 Mendoza → destino=d1 CABA) ─────────
+    ('ff000000-0000-0000-0000-000000000118', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '11 days'),
+
+    ('ff000000-0000-0000-0000-000000000119', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000005',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '10 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000120', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '8 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000121', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000001',   -- sucursal CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '5 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000122', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '3 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000123', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'ENTREGADO',
+     'c1000000-0003-0003-0003-000000000001',   -- entrega en CABA (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000037', NOW() - INTERVAL '1 day 8 hours'),
+
+    -- ── LT-10000038: ENTREGADO (origen=d6 La Plata → destino=d3 Córdoba) ─────
+    ('ff000000-0000-0000-0000-000000000124', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '15 days'),
+
+    ('ff000000-0000-0000-0000-000000000125', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000006',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '14 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000126', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '12 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000127', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000003',   -- sucursal Córdoba (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '9 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000128', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '6 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000129', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'ENTREGADO',
+     'c1000000-0003-0003-0003-000000000003',   -- entrega en Córdoba (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000038', NOW() - INTERVAL '4 days 8 hours'),
+
+    -- ── LT-10000039: RETRASADO desde EN_DISTRIBUCION ─────────────────────────
+    --    (origen=d1 CABA → destino=d4 Rosario)
+    ('ff000000-0000-0000-0000-000000000130', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '9 days'),
+
+    ('ff000000-0000-0000-0000-000000000131', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000001',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '8 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000132', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '6 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000133', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000004',   -- sucursal Rosario (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '4 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000134', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'EN_DISTRIBUCION',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '2 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000135', 'CAMBIO_ESTADO', 'EN_DISTRIBUCION', 'RETRASADO',
+     'c1000000-0003-0003-0003-000000000004',   -- última ubicación conocida (Rosario)
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor registra la excepción
+     'ee000000-0000-0000-0000-000000000039', NOW() - INTERVAL '8 hours'),
+
+    -- ── LT-10000040: CANCELADO desde EN_SUCURSAL ─────────────────────────────
+    --    (origen=d2 CABA → destino=d5 Mendoza)
+    ('ff000000-0000-0000-0000-000000000136', 'CREACION', NULL, 'REGISTRADO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000040', NOW() - INTERVAL '8 days'),
+
+    ('ff000000-0000-0000-0000-000000000137', 'CAMBIO_ESTADO', 'REGISTRADO', 'EN_DEPOSITO',
+     'c1000000-0003-0003-0003-000000000002',
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000040', NOW() - INTERVAL '7 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000138', 'CAMBIO_ESTADO', 'EN_DEPOSITO', 'EN_TRANSITO',
+     NULL, 'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000040', NOW() - INTERVAL '5 days 14 hours'),
+
+    ('ff000000-0000-0000-0000-000000000139', 'CAMBIO_ESTADO', 'EN_TRANSITO', 'EN_SUCURSAL',
+     'c1000000-0003-0003-0003-000000000005',   -- sucursal Mendoza (destino)
+     'b1b2c3d4-0002-0002-0002-000000000003',
+     'ee000000-0000-0000-0000-000000000040', NOW() - INTERVAL '3 days 8 hours'),
+
+    ('ff000000-0000-0000-0000-000000000140', 'CAMBIO_ESTADO', 'EN_SUCURSAL', 'CANCELADO',
+     NULL,
+     'b1b2c3d4-0002-0002-0002-000000000002',   -- supervisor cancela
+     'ee000000-0000-0000-0000-000000000040', NOW() - INTERVAL '1 day 12 hours')
+
+ON CONFLICT (uuid) DO NOTHING;
+
+-- ==============================================
+-- EVENTOS DE USUARIO
+-- ==============================================
+INSERT INTO evento_de_usuario (
+    uuid, accion, estado_inicial, estado_final,
+    usuario_ejecutor_uuid, usuario_afectado_uuid, fecha_hora
+) VALUES
+    ('f1000000-0006-0006-0006-000000000001', 'ALTA', NULL, 'ALTA',
+     'b1b2c3d4-0002-0002-0002-000000000001', 'b1b2c3d4-0002-0002-0002-000000000003', NOW() - INTERVAL '10 days'),
+    ('f1000000-0006-0006-0006-000000000002', 'LOGIN', 'ALTA', 'ALTA',
+     'b1b2c3d4-0002-0002-0002-000000000003', 'b1b2c3d4-0002-0002-0002-000000000003', NOW() - INTERVAL '2 days'),
+    ('f1000000-0006-0006-0006-000000000003', 'LOGIN', 'ALTA', 'ALTA',
+     'b1b2c3d4-0002-0002-0002-000000000002', 'b1b2c3d4-0002-0002-0002-000000000002', NOW() - INTERVAL '2 days'),
+    ('f1000000-0006-0006-0006-000000000004', 'ALTA', NULL, 'ALTA',
+     'b1b2c3d4-0002-0002-0002-000000000001', 'b1b2c3d4-0002-0002-0002-000000000004', NOW() - INTERVAL '7 days'),
+    ('f1000000-0006-0006-0006-000000000005', 'BAJA', 'ALTA', 'BAJA',
+     'b1b2c3d4-0002-0002-0002-000000000001', 'b1b2c3d4-0002-0002-0002-000000000004', NOW() - INTERVAL '1 day')
+ON CONFLICT (uuid) DO NOTHING;
