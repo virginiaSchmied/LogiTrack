@@ -544,8 +544,8 @@ async function openDetalle(trackingId) {
       btnEditar.style.display = '';
       btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
     }
-    // Delete: only for CANCELADO
-    if (e.estado === 'CANCELADO') {
+    // Delete: only for CANCELADO and SUPERVISOR role (LP-102)
+    if (e.estado === 'CANCELADO' && _userRole === 'SUPERVISOR') {
       btnEliminar.style.display = '';
       btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
     }
@@ -671,9 +671,15 @@ function openEstado(trackingId, estadoActual, ultimaUbicacion = null, estadoReve
   const badgeActual  = `<span class="badge ${BADGE_CLASS[estadoActual] || ''}">${escHtml(BADGE_LABEL[estadoActual] || estadoActual)}</span>`;
 
   // Si es reversible y tenemos el estado previo, mostrar solo esa opción; si no, usar el grafo completo
-  const transiciones = esReversible && estadoRevertir
+  // OPERADOR no puede asignar excepciones (RETRASADO/BLOQUEADO): solo SUPERVISOR puede
+  // OPERADOR no puede asignar excepciones ni cancelar: solo SUPERVISOR puede
+  const ESTADOS_SOLO_SUPERVISOR = ['RETRASADO', 'BLOQUEADO', 'CANCELADO'];
+  const transicionesBase = esReversible && estadoRevertir
     ? [estadoRevertir]
     : TRANSICIONES_VALIDAS[estadoActual] || [];
+  const transiciones = _userRole !== 'SUPERVISOR'
+    ? transicionesBase.filter(t => !ESTADOS_SOLO_SUPERVISOR.includes(t))
+    : transicionesBase;
 
     
   let opcionesHtml = `

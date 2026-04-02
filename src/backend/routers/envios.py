@@ -445,11 +445,20 @@ def _resolver_ubicacion(payload_nueva, payload_reusar, envio, db):
 
 # ── PATCH /envios/{tracking_id}/estado ───────────────────────────────────────
 
+ESTADOS_SOLO_SUPERVISOR = [EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO, EstadoEnvioEnum.CANCELADO]
+
+
 @router.patch("/{tracking_id}/estado", response_model=EnvioOut)
-def cambiar_estado(tracking_id: str, payload: EnvioCambioEstado, db: Session = Depends(get_db)):
+def cambiar_estado(
+    tracking_id: str,
+    payload: EnvioCambioEstado,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Cambia el estado de un envío validando contra el grafo de transiciones permitidas.
     Cubre flujo normal, estados de excepción y reversiones en un único endpoint.
+    Solo SUPERVISOR puede asignar excepciones (RETRASADO, BLOQUEADO).
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -462,6 +471,12 @@ def cambiar_estado(tracking_id: str, payload: EnvioCambioEstado, db: Session = D
         raise HTTPException(
             status_code=422,
             detail=f"Transición inválida: {envio.estado.value} → {payload.nuevo_estado.value}"
+        )
+
+    if payload.nuevo_estado in ESTADOS_SOLO_SUPERVISOR and current_user.rol.nombre != "SUPERVISOR":
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso denegado: solo el Supervisor puede asignar excepciones o cancelar envíos",
         )
 
     # CANCELADO no requiere ubicación
@@ -486,14 +501,13 @@ def cambiar_estado(tracking_id: str, payload: EnvioCambioEstado, db: Session = D
     estado_anterior = envio.estado
     envio.estado    = payload.nuevo_estado
 
-    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.CAMBIO_ESTADO,
         estado_inicial=estado_anterior,
         estado_final=payload.nuevo_estado,
         ubicacion_actual_id=ubicacion_id,
-        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)
