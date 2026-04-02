@@ -1555,6 +1555,36 @@ body {
     grid-template-columns: 1fr
   }
 
+  /* Modal de cambio de estado */
+  .estado-actual-row {
+    flex-wrap: wrap
+  }
+
+  .estado-opcion-card {
+    padding: 1rem;
+    margin-bottom: .75rem
+  }
+
+  .estado-transicion-mini {
+    gap: .5rem
+  }
+
+  .estado-flecha {
+    font-size: 1rem
+  }
+
+  #estado-form .modal-footer {
+    flex-direction: column-reverse;
+    gap: .5rem;
+    padding: 1rem 0 0
+  }
+
+  #estado-form .modal-footer .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px
+  }
+
   /* Tabs de detalle: ocultar texto "Ver auditoría" si hay poco espacio */
   .detalle-tabs-row {
     flex-wrap: wrap;
@@ -1679,6 +1709,15 @@ body {
 
 /* RESPONSIVE ≤768px */
 @media(max-width:768px) {
+  /* Modal de cambio de estado: tap targets adecuados en tablet */
+  .estado-opcion-card {
+    padding: .9rem 1rem
+  }
+
+  #estado-form .modal-footer .btn {
+    min-height: 44px
+  }
+
   .navbar {
     height: auto;
     padding: 0
