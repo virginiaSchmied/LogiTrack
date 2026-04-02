@@ -152,6 +152,22 @@ class EnvioOutDetalle(EnvioOut):
     estado_revertir:  Optional[str]          = None  # último estado del flujo normal (para revertir excepción)
 
 
+class EnvioPublicoOut(BaseModel):
+    """
+    Schema para consulta pública por tracking ID.
+    Expone solo datos no sensibles: tracking ID, estado, ciudades de origen/destino
+    y fecha estimada de entrega. No incluye nombres de personas ni datos de dirección
+    completos (calle, número, código postal). CA-2, CA-3.
+    """
+    tracking_id:            str
+    estado:                 EstadoEnvioEnum
+    fecha_entrega_estimada: date
+    ciudad_origen:          str
+    provincia_origen:       str
+    ciudad_destino:         str
+    provincia_destino:      str
+
+
 # ── Respuesta paginada ────────────────────────────────────────────────────────
 
 class EnvioListResponse(BaseModel):

@@ -267,25 +267,25 @@ async function logout() {
   showLoginScreen();
 }
 
-// ─── Consulta pública por tracking ID (LP-136) ───────────────────────────────
+// ─── Consulta pública por tracking ID (CA-2, CA-3, CA-4, CA-5) ──────────────
 async function buscarPublico() {
-  const input     = document.getElementById('public-track-input');
-  const resultEl  = document.getElementById('public-track-result');
+  const input      = document.getElementById('public-track-input');
+  const resultEl   = document.getElementById('public-track-result');
   const trackingId = input.value.trim().toUpperCase();
 
   if (!trackingId) {
-    resultEl.style.display = '';
+    resultEl.style.display = 'block';
     resultEl.innerHTML = `<p class="track-error">Ingresá un tracking ID.</p>`;
     return;
   }
 
-  resultEl.style.display = '';
+  resultEl.style.display = 'block';
   resultEl.innerHTML = `<p style="font-size:.82rem;color:var(--text-sub)">Consultando…</p>`;
 
   try {
-    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
+    const res = await fetch(`${API_BASE}/envios/publico/${encodeURIComponent(trackingId)}`);
     if (res.status === 404) {
-      resultEl.innerHTML = `<p class="track-error">No se encontró el envío <strong>${escHtml(trackingId)}</strong>. Verificá el tracking ID.</p>`;
+      resultEl.innerHTML = `<p class="track-error">No se encontró ningún envío con el tracking ID <strong>${escHtml(trackingId)}</strong>. Verificá el código e intentá nuevamente.</p>`;
       return;
     }
     if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -293,18 +293,36 @@ async function buscarPublico() {
     const e = await res.json();
     resultEl.innerHTML = `
       <div class="track-result-card">
-        <div class="track-result-tid">${escHtml(e.tracking_id)}</div>
-        <div class="track-result-row">
-          <span>Estado</span>
+        <div class="track-result-header">
+          <span class="track-result-tid">${escHtml(e.tracking_id)}</span>
           <span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>
         </div>
-        <div class="track-result-row">
-          <span>Entrega estimada</span>
-          <strong>${escHtml(formatFecha(e.fecha_entrega_estimada))}</strong>
-        </div>
-        <div class="track-result-row">
-          <span>Destino</span>
-          <strong>${escHtml(e.direccion_destino.ciudad)}, ${escHtml(e.direccion_destino.provincia)}</strong>
+        <div class="detail-grid" style="margin-top:.85rem">
+          <div class="detail-section">
+            <div class="section-title">Estado del envío</div>
+            <dl class="detail-list">
+              <div class="dl-row">
+                <dt>Entrega estimada</dt>
+                <dd class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="detail-cols">
+            <div class="detail-section">
+              <div class="section-title">Origen</div>
+              <dl class="detail-list">
+                <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.ciudad_origen)}</dd></div>
+                <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.provincia_origen)}</dd></div>
+              </dl>
+            </div>
+            <div class="detail-section">
+              <div class="section-title">Destino</div>
+              <dl class="detail-list">
+                <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.ciudad_destino)}</dd></div>
+                <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.provincia_destino)}</dd></div>
+              </dl>
+            </div>
+          </div>
         </div>
       </div>`;
   } catch (err) {

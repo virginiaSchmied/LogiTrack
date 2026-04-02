@@ -9,7 +9,7 @@ from datetime import date
 
 from database import get_db
 from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
-from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo
+from schemas import EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse, EnvioUpdateContacto, EnvioUpdateOperativo, EnvioPublicoOut
 from ml_predictor import predecir_prioridad
 from auth import require_operador_supervisor, require_supervisor
 
@@ -165,6 +165,34 @@ def listar_envios(
     return EnvioListResponse(
         total=total,
         items=[_build_envio_list_item(e) for e in envios],
+    )
+
+
+# ── GET /envios/publico/{tracking_id} ────────────────────────────────────────
+
+@router.get("/publico/{tracking_id}", response_model=EnvioPublicoOut)
+def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
+    """
+    Consulta pública de estado de envío por tracking ID.
+    Devuelve únicamente: tracking ID, estado, ciudades de origen/destino y
+    fecha estimada de entrega. No expone nombre del remitente ni destinatario,
+    ni calle, número o código postal de ninguna dirección.
+    No requiere autenticación. CA-2, CA-3, CA-4, CA-5.
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se encontró ningún envío con el tracking ID {tracking_id}",
+        )
+    return EnvioPublicoOut(
+        tracking_id=envio.tracking_id,
+        estado=envio.estado,
+        fecha_entrega_estimada=envio.fecha_entrega_estimada,
+        ciudad_origen=envio.direccion_origen.ciudad,
+        provincia_origen=envio.direccion_origen.provincia,
+        ciudad_destino=envio.direccion_destino.ciudad,
+        provincia_destino=envio.direccion_destino.provincia,
     )
 
 
