@@ -2,7 +2,6 @@ import uuid
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
@@ -16,7 +15,7 @@ from schemas import (
 )
 from ml_predictor import predecir_prioridad
 from auth import require_operador_supervisor, require_supervisor
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/envios", tags=["Envíos"])
 
 
