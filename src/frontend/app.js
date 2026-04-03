@@ -112,7 +112,7 @@ function openLoginModal() {
   _clearLoginFieldError('login-email');
   _clearLoginFieldError('login-password');
   setTimeout(() => document.getElementById('login-email').focus(), 50);
-}
+} 
 
 function closeLoginModal() {
   document.getElementById('login-modal').style.display = 'none';
