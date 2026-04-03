@@ -40,7 +40,8 @@ function isAuthenticated() {
 }
 
 function authHeaders() {
-  return _token ? { "Authorization": `Bearer ${_token}` } : {};
+  const token = _token || localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
@@ -514,6 +515,7 @@ async function openDetalle(trackingId) {
   const body     = document.getElementById('modal-body');
   const tidEl    = document.getElementById('modal-tracking-id');
   const estadoEl = document.getElementById('modal-estado-badge');
+  
 
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
@@ -525,8 +527,12 @@ async function openDetalle(trackingId) {
   document.body.style.overflow = 'hidden';
 
   try {
-    // GET /{tracking_id} es público (LP-136), no requiere token
-    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
+    // GET /envios/{tracking_id} requiere autenticación (JWT)
+    const res = await fetch(`${API_BASE}/envios/${trackingId}`, {
+      headers: {
+        ...authHeaders()
+      }
+    });
     if (!res.ok) throw new Error(`Error ${res.status}`);
     const e = await res.json();
     _envioDetalle = e;
