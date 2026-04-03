@@ -64,23 +64,31 @@ def patch_db(client):
         yield
 
 
+@pytest.fixture(scope='class')
+def running_scheduler():
+    """Inicia el scheduler para que get_job() pueda acceder a los jobs registrados."""
+    scheduler.start()
+    yield scheduler
+    scheduler.shutdown(wait=False)
+
+
 # ── CP-0331 — CA-1: configuración del job ────────────────────────────────────
 
 class TestCP0331ConfiguracionJob:
 
-    def test_cp0331_job_existe_en_el_scheduler(self):
+    def test_cp0331_job_existe_en_el_scheduler(self, running_scheduler):
         """CP-0331 (HP) — CA-1: El job 'recalcular_prioridades' está registrado en el scheduler."""
-        job = scheduler.get_job('recalcular_prioridades')
+        job = running_scheduler.get_job('recalcular_prioridades')
         assert job is not None
 
-    def test_cp0331_job_trigger_es_cron(self):
+    def test_cp0331_job_trigger_es_cron(self, running_scheduler):
         """CP-0331 (HP) — CA-1: El job usa trigger de tipo cron."""
-        job = scheduler.get_job('recalcular_prioridades')
+        job = running_scheduler.get_job('recalcular_prioridades')
         assert job.trigger.__class__.__name__ == 'CronTrigger'
 
-    def test_cp0331_job_corre_a_medianoche(self):
+    def test_cp0331_job_corre_a_medianoche(self, running_scheduler):
         """CP-0331 (HP) — CA-1: El cron está configurado en hour=0, minute=0."""
-        job = scheduler.get_job('recalcular_prioridades')
+        job = running_scheduler.get_job('recalcular_prioridades')
         fields = {f.name: str(f) for f in job.trigger.fields}
         assert fields['hour'] == '0'
         assert fields['minute'] == '0'
