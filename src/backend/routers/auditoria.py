@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from models import EventoDeUsuario,Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
+from models import EventoDeUsuario, Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
 from auth import hash_password, require_admin
 
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoría"])
+
+
 @router.get("/eventos")
 def obtener_eventos(
     usuario_afectado_uuid: Optional[str] = Query(None),

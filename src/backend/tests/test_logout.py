@@ -73,8 +73,8 @@ class TestCA2ComportamientoTrasTlogout:
         assert resp_logout.status_code == 200
         # El backend no tiene blacklist: el token sigue técnicamente aceptado.
         # Este comportamiento es conocido y aceptado para el MVP.
-        resp_post_logout = client.get("/envios/", headers=headers_operador)
-        # No afirmamos el status_code aquí: documentamos que la invalidación
+        client.get("/envios/", headers=headers_operador)
+        # El backend no afirma el status_code post-logout: la invalidación
         # es responsabilidad del cliente en el MVP actual.
         assert resp_logout.status_code == 200  # el logout en sí fue exitoso
 
