@@ -101,6 +101,9 @@ def client():
     )
     SessionLocal = sessionmaker(bind=engine)
 
+    global _current_sessionlocal
+    _current_sessionlocal = SessionLocal
+
     def override_get_db():
         db = SessionLocal()
         try:
