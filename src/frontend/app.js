@@ -613,6 +613,8 @@ function closeDetalle() {
   _envioDetalle = null;
 }
 
+
+
 // ─── Eliminación de envío ─────────────────────────────────────────────────────
 let _envioAEliminar = null;
 
@@ -1469,6 +1471,7 @@ async function registrarUsuario() {
       errorEl.style.display = '';
       return;
     }
+    
 
     // CA-2: registro exitoso
     const data = await res.json();
@@ -1485,6 +1488,73 @@ async function registrarUsuario() {
     btn.textContent = 'Registrar usuario';
   }
 }
+
+// ─── Auditoria (ADMINISTRADOR) ─────────────────────────────────────────
+
+async function buscarAuditoria() {
+    const afectadoEl = document.getElementById('filtro-afectado');
+    const ejecutorEl = document.getElementById('filtro-ejecutor');
+    const msgEl = document.getElementById('auditoria-mensaje');
+    const tablaBody = document.querySelector('#tabla-auditoria tbody');
+
+    // limpiar mensajes y tabla
+    msgEl.style.display = 'none';
+    msgEl.textContent = '';
+    tablaBody.innerHTML = '';
+
+    const params = new URLSearchParams();
+
+    if (afectadoEl.value.trim()) params.append('usuario_afectado_uuid', afectadoEl.value.trim());
+    if (ejecutorEl.value.trim()) params.append('usuario_ejecutor_uuid', ejecutorEl.value.trim());
+    const res = await fetch(`${API_BASE}/auditoria/eventos?${params.toString()}`, {
+    headers: authHeaders()
+    });
+    try {
+        const res = await fetch(`${API_BASE}/auditoria/eventos?${params.toString()}`, {
+            method: 'GET',
+            headers: { ...authHeaders() }
+        });
+
+        if (await handleApiError(res)) return;
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            msgEl.textContent = data.detail || 'Ocurrió un error al obtener la auditoría.';
+            msgEl.style.display = '';
+            return;
+        }
+
+        const data = await res.json();
+
+        if (!data.length) {
+            msgEl.textContent = 'No se encontraron registros.';
+            msgEl.style.display = '';
+            return;
+        }
+
+        // rellenar tabla
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+
+            tr.innerHTML = `
+                <td>${escHtml(item.accion || '')}</td>
+                <td>${escHtml(item.usuario_ejecutor_uuid || '')}</td>
+                <td>${escHtml(item.usuario_afectado_uuid || '')}</td>
+                <td>${escHtml(item.estado_inicial || '')}</td>
+                <td>${escHtml(item.estado_final || '')}</td>
+                <td>${escHtml(item.fecha || '')}</td>
+            `;
+
+            tablaBody.appendChild(tr);
+        });
+
+    } catch (err) {
+        console.error("Error al buscar auditoría:", err);
+        msgEl.textContent = 'No se pudo conectar con el servidor. Verificá que esté disponible.';
+        msgEl.style.display = '';
+    }
+}
+
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1539,3 +1609,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+
+  document.getElementById('modal-alta-usuario').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalAlta();
+  });
+
+});
+
+  function cerrarModalAlta() {
+    document.getElementById('modal-alta-usuario').style.display = 'none';
+    document.getElementById('form-alta-usuario').reset();
+    document.getElementById('admin-registro-success').style.display = 'none';
+    document.getElementById('admin-registro-error').style.display = 'none';
+  }
+
+function mostrarAuditoria() {
+    document.getElementById("auditoria-container").style.display = "block";
+    buscarAuditoria(); // carga inicial sin filtros (CA-2)
+}
+
