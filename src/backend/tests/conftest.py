@@ -108,10 +108,14 @@ def client():
 
 @pytest.fixture()
 def db_session(client):
-    """Sesión directa a la DB de prueba para setup y assertions que requieren acceso al ORM."""
+    """Sesión directa a la BD de prueba - ya está sembrada por el fixture client."""
+    # El fixture client ya siembra la BD, solo proporciona una sesión
     db = _SessionLocal()
-    yield db
-    db.close()
+    try:
+        yield db
+    finally:
+        db.rollback()  # Revierte cambios no confirmados
+        db.close()
 
 
 @pytest.fixture()
