@@ -115,6 +115,7 @@ def db_session(client):
         yield db
     finally:
         db.rollback()  # Revierte cambios no confirmados
+        db.expunge_all()  # Limpia todos los objetos de la sesión
         db.close()
 
 
