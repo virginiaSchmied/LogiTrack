@@ -94,11 +94,11 @@ def client():
     # Limpiar completamente la BD antes de cada test
     Base.metadata.drop_all(bind=_ENGINE)
     Base.metadata.create_all(bind=_ENGINE)
- 
+
     db = _SessionLocal()
     _seed_db(db)
     db.close()
- 
+
     with TestClient(app) as c:
         yield c
 
