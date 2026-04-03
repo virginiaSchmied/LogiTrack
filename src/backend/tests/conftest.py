@@ -101,6 +101,9 @@ def client():
     )
     SessionLocal = sessionmaker(bind=engine)
 
+    global _current_sessionlocal
+    _current_sessionlocal = SessionLocal
+
     def override_get_db():
         db = SessionLocal()
         try:
@@ -114,6 +117,7 @@ def client():
 
     db = _current_sessionlocal()
     try:
+        db.rollback()
         _seed_db(db)
     finally:
         db.close()
