@@ -87,7 +87,9 @@ def _seed_db(db):
 def _make_token(user_uuid: uuid.UUID, email: str, rol: str) -> str:
     return create_access_token(sub=str(user_uuid), email=email, rol=rol)
 
+
 _current_sessionlocal = None
+
 
 @pytest.fixture()
 def client():
@@ -125,7 +127,6 @@ def client():
 @pytest.fixture()
 def db_session(client):
     """Acceso directo al ORM para setup/assertions."""
-    global _current_sessionlocal
 
     db = _current_sessionlocal()
     try:
