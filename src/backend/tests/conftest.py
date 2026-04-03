@@ -90,33 +90,38 @@ def _make_token(user_uuid: uuid.UUID, email: str, rol: str) -> str:
 
 @pytest.fixture()
 def client():
-    """TestClient con base de datos SQLite en memoria, reseteada entre tests."""
-    # Limpiar completamente la BD antes de cada test
-    Base.metadata.drop_all(bind=_ENGINE)
-    Base.metadata.create_all(bind=_ENGINE)
+    """TestClient con BD SQLite nueva PARA CADA TEST."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SessionLocal = sessionmaker(bind=engine)
 
-    db = _SessionLocal()
-    _seed_db(db)
-    db.close()
+    def override_get_db():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    Base.metadata.create_all(bind=engine)
 
     with TestClient(app) as c:
         yield c
 
-    # Limpiar después del test para el siguiente
-    Base.metadata.drop_all(bind=_ENGINE)
+    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture()
 def db_session(client):
-    """Sesión directa a la BD de prueba - ya está sembrada por el fixture client."""
-    # El fixture client ya siembra la BD, solo proporciona una sesión
-    db = _SessionLocal()
-    try:
-        yield db
-    finally:
-        db.rollback()  # Revierte cambios no confirmados
-        db.expunge_all()  # Limpia todos los objetos de la sesión
-        db.close()
+    """Acceso directo al ORM para setup/assertions."""
+    SessionLocal = sessionmaker(bind=app.dependency_overrides[get_db].__self__)
+    db = SessionLocal()
+    yield db
+    db.close()
 
 
 @pytest.fixture()
