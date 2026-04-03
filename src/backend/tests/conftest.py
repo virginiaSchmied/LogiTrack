@@ -70,6 +70,14 @@ def _create_user_and_login(client, email: str, password: str, rol_nombre: str) -
 def client():
     """TestClient con base de datos SQLite en memoria, reseteada entre tests."""
     Base.metadata.create_all(bind=_ENGINE)
+    db = _SessionLocal()
+    try:
+        for nombre in ("OPERADOR", "SUPERVISOR", "ADMINISTRADOR"):
+            if not db.query(Rol).filter(Rol.nombre == nombre).first():
+                db.add(Rol(uuid=uuid.uuid4(), nombre=nombre))
+        db.commit()
+    finally:
+        db.close()
     with TestClient(app) as c:
         yield c
     Base.metadata.drop_all(bind=_ENGINE)
