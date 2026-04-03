@@ -54,8 +54,8 @@ def _seed_db(db):
         models.Rol(uuid=ROL_SUPERVISOR_UUID, nombre="SUPERVISOR"),
         models.Rol(uuid=ROL_ADMIN_UUID,      nombre="ADMINISTRADOR"),
     ]
-    db.add_all(roles)
-    db.flush()
+    for role in roles:
+        db.merge(role)
 
     users = [
         models.Usuario(
@@ -80,7 +80,9 @@ def _seed_db(db):
             rol_uuid=ROL_ADMIN_UUID,
         ),
     ]
-    db.add_all(users)
+    for user in users:
+        db.merge(user)
+
     db.commit()
 
 
