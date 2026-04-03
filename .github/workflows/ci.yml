@@ -45,20 +45,33 @@ jobs:
           npm run lint
 
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Run Python tests
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r src/backend/requirements.txt
-          pip install pytest httpx
-          pytest src/backend/tests/ -v
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
 
-      - name: Run JavaScript tests
-        working-directory: ./src/frontend
-        run: |
-          npm install
-          npm test
+    - name: Install Python dependencies
+      working-directory: src/backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+        pip install pytest httpx
+
+    - name: Run Python tests
+      working-directory: src/backend
+      env:
+        DATABASE_URL: "sqlite:///:memory:"
+        SECRET_KEY: "clave-secreta-para-tests-ci"
+      run: pytest tests/ -v
+
+    - name: Run JavaScript tests
+      working-directory: src/frontend
+      run: |
+        npm install
+        npm test
