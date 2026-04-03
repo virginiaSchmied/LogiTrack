@@ -233,10 +233,15 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
 # ── GET /envios/{tracking_id} ─────────────────────────────────────────────────
 
 @router.get("/{tracking_id}", response_model=EnvioOutDetalle)
-def obtener_envio(tracking_id: str, db: Session = Depends(get_db)):
+def obtener_envio(
+    tracking_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Devuelve el detalle de un envío por tracking ID.
     Incluye ultima_ubicacion: la dirección del último EventoDeEnvio con ubicación registrada.
+    Requiere rol Operador o Supervisor.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -364,12 +369,17 @@ def actualizar_contacto(
 # ── PATCH /envios/{tracking_id}/operativo ────────────────────────────────────
 
 @router.patch("/{tracking_id}/operativo", response_model=EnvioOut)
-def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Session = Depends(get_db)):
+def actualizar_operativo(
+    tracking_id: str,
+    payload: EnvioUpdateOperativo,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Modifica la fecha estimada de entrega y la probabilidad de retraso de un envío.
     Recalcula la prioridad con el modelo ML si se provee probabilidad_retraso.
     Registra un EventoDeEnvio de MODIFICACION.
-    TODO: validar rol=OPERADOR cuando se implemente auth.
+    Requiere rol Operador o Supervisor.
     """
     envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     if not envio:
@@ -388,15 +398,13 @@ def actualizar_operativo(tracking_id: str, payload: EnvioUpdateOperativo, db: Se
     except (ValueError, RuntimeError) as e:
         logger.warning("No se pudo predecir la prioridad: %s", e)
 
-    # TODO: reemplazar usuario_uuid hardcodeado por el del token JWT cuando se implemente auth
-    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
     evento = EventoDeEnvio(
         uuid=uuid.uuid4(),
         accion=AccionEnvioEnum.MODIFICACION,
         estado_inicial=envio.estado,
         estado_final=envio.estado,
         ubicacion_actual_id=None,
-        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        usuario_uuid=current_user.uuid,
         envio_uuid=envio.uuid,
     )
     db.add(evento)
