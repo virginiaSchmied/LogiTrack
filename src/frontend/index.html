@@ -375,8 +375,8 @@
       </div>
 
       <!-- Tarjetas de acciones -->
-      <div class="admin-cards">
-        <div class="admin-card admin-card--active" role="button" tabindex="0"
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+        <div class="admin-card" style="cursor:pointer; opacity:1;" role="button" tabindex="0"
           onclick="document.getElementById('modal-alta-usuario').style.display='flex'"
           onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('modal-alta-usuario').style.display='flex'}"
           aria-haspopup="dialog" aria-label="Abrir formulario de nuevo usuario">
@@ -385,7 +385,7 @@
           <div class="ac-note">Registrar en el sistema</div>
         </div>
 
-        <div class="admin-card admin-card--active" role="button" tabindex="0"
+        <div class="admin-card" style="cursor:pointer; opacity:1;" role="button" tabindex="0"
           onclick="mostrarAuditoria()"
           onkeydown="if(event.key==='Enter'||event.key===' '){mostrarAuditoria()}"
           aria-label="Ver auditoría de usuarios">

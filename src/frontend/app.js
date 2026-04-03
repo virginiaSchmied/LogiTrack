@@ -1523,14 +1523,10 @@ function _renderAuditoriaPage() {
         tablaBody.appendChild(tr);
     });
 
-    if (totalPages > 1) {
-        pagDiv.style.display = '';
-        pagInfo.textContent = `Página ${_auditoriaPage + 1} de ${totalPages} (${_auditoriaData.length} registros)`;
-        btnPrev.disabled = _auditoriaPage === 0;
-        btnNext.disabled = _auditoriaPage >= totalPages - 1;
-    } else {
-        pagDiv.style.display = 'none';
-    }
+    pagDiv.style.display = '';
+    pagInfo.textContent = `Página ${_auditoriaPage + 1} de ${totalPages} · ${_auditoriaData.length} registro${_auditoriaData.length !== 1 ? 's' : ''}`;
+    btnPrev.disabled = _auditoriaPage === 0;
+    btnNext.disabled = _auditoriaPage >= totalPages - 1;
 }
 
 function cambiarPaginaAuditoria(delta) {
