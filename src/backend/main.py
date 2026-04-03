@@ -1,12 +1,24 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import envios
+from scheduler import scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
 
 app = FastAPI(
     title="LogiTrack API",
     description="API backend del sistema de gestión de envíos logísticos.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
