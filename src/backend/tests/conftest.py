@@ -91,12 +91,18 @@ def _make_token(user_uuid: uuid.UUID, email: str, rol: str) -> str:
 @pytest.fixture()
 def client():
     """TestClient con base de datos SQLite en memoria, reseteada entre tests."""
+    # Limpiar completamente la BD antes de cada test
+    Base.metadata.drop_all(bind=_ENGINE)
     Base.metadata.create_all(bind=_ENGINE)
+    
     db = _SessionLocal()
     _seed_db(db)
     db.close()
+    
     with TestClient(app) as c:
         yield c
+    
+    # Limpiar después del test para el siguiente
     Base.metadata.drop_all(bind=_ENGINE)
 
 
