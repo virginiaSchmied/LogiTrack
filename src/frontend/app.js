@@ -1491,24 +1491,71 @@ async function registrarUsuario() {
 
 // ─── Auditoria (ADMINISTRADOR) ─────────────────────────────────────────
 
+const _AUDITORIA_PAGE_SIZE = 10;
+let _auditoriaData = [];
+let _auditoriaPage = 0;
+
+function _renderAuditoriaPage() {
+    const tablaBody = document.querySelector('#tabla-auditoria tbody');
+    const pagDiv    = document.getElementById('auditoria-paginacion');
+    const pagInfo   = document.getElementById('auditoria-pag-info');
+    const btnPrev   = document.getElementById('btn-pag-prev');
+    const btnNext   = document.getElementById('btn-pag-next');
+
+    tablaBody.innerHTML = '';
+    const totalPages = Math.ceil(_auditoriaData.length / _AUDITORIA_PAGE_SIZE);
+    const start = _auditoriaPage * _AUDITORIA_PAGE_SIZE;
+    const slice = _auditoriaData.slice(start, start + _AUDITORIA_PAGE_SIZE);
+
+    slice.forEach(item => {
+        const tr = document.createElement('tr');
+        const fechaHora = item.fecha_hora
+            ? new Date(item.fecha_hora).toLocaleString('es-AR')
+            : '';
+        tr.innerHTML = `
+            <td>${escHtml(item.accion || '')}</td>
+            <td>${escHtml(item.usuario_ejecutor_uuid || '')}</td>
+            <td>${escHtml(item.usuario_afectado_uuid || '')}</td>
+            <td>${escHtml(item.estado_inicial || '')}</td>
+            <td>${escHtml(item.estado_final || '')}</td>
+            <td>${escHtml(fechaHora)}</td>
+        `;
+        tablaBody.appendChild(tr);
+    });
+
+    if (totalPages > 1) {
+        pagDiv.style.display = '';
+        pagInfo.textContent = `Página ${_auditoriaPage + 1} de ${totalPages} (${_auditoriaData.length} registros)`;
+        btnPrev.disabled = _auditoriaPage === 0;
+        btnNext.disabled = _auditoriaPage >= totalPages - 1;
+    } else {
+        pagDiv.style.display = 'none';
+    }
+}
+
+function cambiarPaginaAuditoria(delta) {
+    const totalPages = Math.ceil(_auditoriaData.length / _AUDITORIA_PAGE_SIZE);
+    _auditoriaPage = Math.max(0, Math.min(_auditoriaPage + delta, totalPages - 1));
+    _renderAuditoriaPage();
+}
+
 async function buscarAuditoria() {
     const afectadoEl = document.getElementById('filtro-afectado');
     const ejecutorEl = document.getElementById('filtro-ejecutor');
     const msgEl = document.getElementById('auditoria-mensaje');
-    const tablaBody = document.querySelector('#tabla-auditoria tbody');
 
-    // limpiar mensajes y tabla
+    // limpiar estado anterior
     msgEl.style.display = 'none';
     msgEl.textContent = '';
-    tablaBody.innerHTML = '';
+    _auditoriaData = [];
+    _auditoriaPage = 0;
+    document.querySelector('#tabla-auditoria tbody').innerHTML = '';
+    document.getElementById('auditoria-paginacion').style.display = 'none';
 
     const params = new URLSearchParams();
-
     if (afectadoEl.value.trim()) params.append('usuario_afectado_uuid', afectadoEl.value.trim());
     if (ejecutorEl.value.trim()) params.append('usuario_ejecutor_uuid', ejecutorEl.value.trim());
-    const res = await fetch(`${API_BASE}/auditoria/eventos?${params.toString()}`, {
-    headers: authHeaders()
-    });
+
     try {
         const res = await fetch(`${API_BASE}/auditoria/eventos?${params.toString()}`, {
             method: 'GET',
@@ -1527,32 +1574,33 @@ async function buscarAuditoria() {
         const data = await res.json();
 
         if (!data.length) {
-            msgEl.textContent = 'No se encontraron registros.';
+            msgEl.textContent = 'No se encontraron registros para ese usuario.';
             msgEl.style.display = '';
             return;
         }
 
-        // rellenar tabla
-        data.forEach(item => {
-            const tr = document.createElement('tr');
-
-            tr.innerHTML = `
-                <td>${escHtml(item.accion || '')}</td>
-                <td>${escHtml(item.usuario_ejecutor_uuid || '')}</td>
-                <td>${escHtml(item.usuario_afectado_uuid || '')}</td>
-                <td>${escHtml(item.estado_inicial || '')}</td>
-                <td>${escHtml(item.estado_final || '')}</td>
-                <td>${escHtml(item.fecha || '')}</td>
-            `;
-
-            tablaBody.appendChild(tr);
-        });
+        _auditoriaData = data;
+        _renderAuditoriaPage();
 
     } catch (err) {
         console.error("Error al buscar auditoría:", err);
         msgEl.textContent = 'No se pudo conectar con el servidor. Verificá que esté disponible.';
         msgEl.style.display = '';
     }
+}
+
+function limpiarFiltrosAuditoria() {
+    document.getElementById('filtro-afectado').value = '';
+    document.getElementById('filtro-ejecutor').value = '';
+}
+
+function cerrarAuditoria() {
+    document.getElementById('auditoria-container').style.display = 'none';
+    _auditoriaData = [];
+    _auditoriaPage = 0;
+    document.querySelector('#tabla-auditoria tbody').innerHTML = '';
+    document.getElementById('auditoria-paginacion').style.display = 'none';
+    document.getElementById('auditoria-mensaje').style.display = 'none';
 }
 
 

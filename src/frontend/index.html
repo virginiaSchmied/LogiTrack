@@ -374,11 +374,26 @@
         </div>
       </div>
 
-      <!-- Alta de usuario -->
-      <button class="btn btn-primary" onclick="document.getElementById('modal-alta-usuario').style.display='flex'" aria-haspopup="dialog">
-      + Nuevo usuario
-    </button>
+      <!-- Tarjetas de acciones -->
+      <div class="admin-cards">
+        <div class="admin-card admin-card--active" role="button" tabindex="0"
+          onclick="document.getElementById('modal-alta-usuario').style.display='flex'"
+          onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('modal-alta-usuario').style.display='flex'}"
+          aria-haspopup="dialog" aria-label="Abrir formulario de nuevo usuario">
+          <div class="ac-icon" aria-hidden="true">👤</div>
+          <div class="ac-label">+ Nuevo usuario</div>
+          <div class="ac-note">Registrar en el sistema</div>
+        </div>
 
+        <div class="admin-card admin-card--active" role="button" tabindex="0"
+          onclick="mostrarAuditoria()"
+          onkeydown="if(event.key==='Enter'||event.key===' '){mostrarAuditoria()}"
+          aria-label="Ver auditoría de usuarios">
+          <div class="ac-icon" aria-hidden="true">📋</div>
+          <div class="ac-label">Auditoría de usuarios</div>
+          <div class="ac-note">Consultar historial</div>
+        </div>
+      </div>
 
     <div id="modal-alta-usuario" role="dialog" aria-modal="true" aria-labelledby="modal-alta-titulo"
       style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center;">
@@ -450,16 +465,13 @@
 
 
 
-    <div class="admin-card" style="cursor:pointer;" onclick="mostrarAuditoria()">
-        <div class="ac-icon" aria-hidden="true">📋</div>
-        <div class="ac-label">Auditoría de usuarios</div>
-        <div class="ac-note">Consultar historial</div>
-    </div>
-
     <!-- === AUDITORÍA === -->
     <div id="auditoria-container" style="display:none; margin-top:1.5rem;">
 
-        <h3>Auditoría de usuarios</h3>
+        <div class="auditoria-header">
+          <h3 style="margin:0;">Auditoría de usuarios</h3>
+          <button class="btn btn-ghost btn-sm" onclick="cerrarAuditoria()" aria-label="Cerrar auditoría">✕ Cerrar</button>
+        </div>
 
         <!-- Filtros -->
         <div class="row" style="margin-bottom:1rem;">
@@ -471,8 +483,9 @@
                 <label>UUID Usuario Ejecutor</label>
                 <input id="filtro-ejecutor" class="form-control" placeholder="UUID">
             </div>
-            <div class="col-md-2" style="display:flex; align-items:flex-end;">
+            <div class="col-md-2" style="display:flex; align-items:flex-end; gap:.5rem; flex-wrap:wrap;">
                 <button class="btn btn-primary w-100" onclick="buscarAuditoria()">Buscar</button>
+                <button class="btn btn-ghost w-100" onclick="limpiarFiltrosAuditoria()" aria-label="Limpiar filtros UUID">Limpiar</button>
             </div>
         </div>
 
@@ -492,6 +505,13 @@
             </thead>
             <tbody></tbody>
         </table>
+
+        <!-- Paginación -->
+        <div id="auditoria-paginacion" class="auditoria-pagination" style="display:none;" aria-label="Navegación de páginas de auditoría">
+          <button class="btn btn-ghost btn-sm" id="btn-pag-prev" onclick="cambiarPaginaAuditoria(-1)" aria-label="Página anterior">‹ Anterior</button>
+          <span id="auditoria-pag-info"></span>
+          <button class="btn btn-ghost btn-sm" id="btn-pag-next" onclick="cambiarPaginaAuditoria(1)" aria-label="Página siguiente">Siguiente ›</button>
+        </div>
     </div>
 
     </section>
