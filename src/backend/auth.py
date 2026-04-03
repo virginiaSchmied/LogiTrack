@@ -6,6 +6,7 @@ Cubre LP-254 (mecanismo JWT centralizado).
 import os
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -21,7 +22,7 @@ ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "8"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_bearer = HTTPBearer()
+_bearer = HTTPBearer(auto_error=False)
 
 
 # ── Contraseñas ───────────────────────────────────────────────────────────────
@@ -72,13 +73,19 @@ def decode_token(token: str) -> dict:
 # ── Dependencias FastAPI ──────────────────────────────────────────────────────
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> Usuario:
     """
     Dependencia que extrae y valida el token del header Authorization.
     Retorna el Usuario activo. LP-254 CA-4/CA-8.
     """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token requerido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     payload = decode_token(credentials.credentials)
     user_uuid_str = payload.get("sub")
     if not user_uuid_str:
