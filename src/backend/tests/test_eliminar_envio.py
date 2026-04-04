@@ -5,6 +5,9 @@ Cubre:
   LP-7  — Eliminar envío
   LP-21 — Solo Supervisor puede eliminar (LP-249 CA-1, LP-252 CA-3)
 
+  CP-0012 (UP) — CA-1: Operador no puede eliminar → 403
+  CP-0013 (UP) — CA-1: Administrador no puede eliminar → 403
+  CP-0014 (EC) — CA-1: Sin token → 401
   CP-0016 (HP) — CA-3: Eliminación lógica exitosa
   CP-0017 (HP) — CA-4: El envío eliminado desaparece del listado general
   CP-0018 (HP) — CA-5: El historial de auditoría se conserva
@@ -44,19 +47,24 @@ def _crear_envio(client, headers_operador) -> str:
     return r.json()["tracking_id"]
 
 
-# ── LP-21 — Control de acceso ─────────────────────────────────────────────────
+# ── CP-0012 / CP-0013 / CP-0014 — CA-1: control de acceso ───────────────────
 
-class TestControlAccesoEliminacion:
+class TestCP0012CP0013CP0014ControlAccesoEliminacion:
 
-    def test_sin_token_retorna_401(self, client, headers_operador):
-        """DELETE sin autenticación → 401."""
-        tid = _crear_envio(client, headers_operador)
-        assert client.delete(f"/envios/{tid}").status_code == 401
-
-    def test_operador_no_puede_eliminar_retorna_403(self, client, headers_operador):
-        """Operador intenta eliminar → 403 Forbidden (solo Supervisor puede). LP-249 CA-1."""
+    def test_cp0012_operador_no_puede_eliminar_retorna_403(self, client, headers_operador):
+        """CP-0012 (UP) — CA-1: JWT con rol Operador recibe 403 al intentar eliminar un envío."""
         tid = _crear_envio(client, headers_operador)
         assert client.delete(f"/envios/{tid}", headers=headers_operador).status_code == 403
+
+    def test_cp0013_admin_no_puede_eliminar_retorna_403(self, client, headers_operador, headers_admin):
+        """CP-0013 (UP) — CA-1: JWT con rol Administrador recibe 403 al intentar eliminar un envío."""
+        tid = _crear_envio(client, headers_operador)
+        assert client.delete(f"/envios/{tid}", headers=headers_admin).status_code == 403
+
+    def test_cp0014_sin_token_retorna_401(self, client, headers_operador):
+        """CP-0014 (EC) — CA-1: Request sin header Authorization retorna 401 al intentar eliminar."""
+        tid = _crear_envio(client, headers_operador)
+        assert client.delete(f"/envios/{tid}").status_code == 401
 
 
 # ── CP-0016 — CA-3: Eliminación lógica exitosa ────────────────────────────────
