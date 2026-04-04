@@ -1,5 +1,6 @@
 import os
 import uuid
+import models  # noqa: F401 — necesario para registrar las tablas en Base.metadata
 
 # Debe setearse antes de cualquier import del backend para que database.py
 # no intente conectarse a la DB de producción durante los tests.
@@ -10,12 +11,22 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+import scheduler as _sched_module
 
-import models  # noqa: F401 — necesario para registrar las tablas en Base.metadata
+
 from database import Base, get_db
 from main import app
 from models import Usuario, Rol, EstadoUsuarioEnum
 from auth import hash_password
+
+# El lifespan de FastAPI llama a scheduler.start() y scheduler.shutdown().
+# shutdown() elimina el jobstore en memoria, con lo que los jobs se pierden
+# y los tests de configuración del scheduler (CP-0331) fallan.
+# Mockeamos start/shutdown para que sean no-ops durante toda la sesión de tests.
+# Los tests de recalcular_prioridades() llaman a la función directamente,
+# por lo que no necesitan que el scheduler esté corriendo.
+_sched_module.scheduler.start = lambda: None
+_sched_module.scheduler.shutdown = lambda wait=True: None
 
 # StaticPool fuerza que todas las conexiones compartan la misma DB en memoria.
 # Sin esto, create_all y la app usan conexiones distintas (cada una vacía).
