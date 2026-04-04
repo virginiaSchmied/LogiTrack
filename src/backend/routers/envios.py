@@ -529,7 +529,11 @@ def cambiar_estado(
     response_model=list[EventoHistorialOut],
     summary="Historial de estados y movimientos de un envío",
 )
-def get_historial(tracking_id: str, db: Session = Depends(get_db)):
+def get_historial(
+    tracking_id: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_operador_supervisor),
+):
     """
     Retorna el historial cronológico de CAMBIO_ESTADO y MOVIMIENTO de un envío.
     Excluye CREACION, MODIFICACION y ELIMINACION (accesibles solo para supervisores en LP-174).

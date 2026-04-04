@@ -9,7 +9,7 @@ Cubre:
   CP-0297 (HP)  — CA-4: Múltiples movimientos sobre un mismo envío
   CP-0293 (UP)  — CA-1: JWT rol = Administrador → 403
   CP-0294 (EC)  — CA-1: Sin Authorization → 401
-  CP-0299 (HP)  — CA-6: Sin token → 401
+  CP-0299 (HP)  — CA-6: Operador autenticado puede registrar movimiento → 201
   CP-0300 (UP)  — CA-6: Sin token → 401 y redirige a login
 
 Tests NO implementados:
@@ -149,11 +149,11 @@ class TestCP0293CP0294CP0299CP0300ControlAccesoMovimiento:
         resp = client.post(f"/envios/{tid}/movimientos", json={"nueva_ubicacion": UBICACION_1})
         assert resp.status_code == 401
 
-    def test_cp0299_sin_token_retorna_401(self, client, headers_operador):
-        """CP-0299 (HP) — CA-6: POST /movimientos sin token retorna 401."""
+    def test_cp0299_operador_autenticado_puede_registrar_movimiento(self, client, headers_operador):
+        """CP-0299 (HP) — CA-6: JWT con rol Operador puede registrar un movimiento (201)."""
         tid = _crear_envio(client, headers_operador)
-        resp = _registrar_movimiento(client, tid, UBICACION_1)  # sin headers → 401
-        assert resp.status_code == 401
+        resp = _registrar_movimiento(client, tid, UBICACION_1, headers_operador)
+        assert resp.status_code == 201
 
     def test_cp0300_usuario_no_autenticado_no_puede_registrar_movimiento(self, client):
         """CP-0300 (UP) — CA-6: Usuario sin token no puede acceder al registro de movimientos (401)."""
