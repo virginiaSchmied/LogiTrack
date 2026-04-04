@@ -11,7 +11,7 @@ from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvio
 from schemas import (
     EnvioCreate, EnvioOut, EnvioOutDetalle, EnvioListItem, EnvioListResponse,
     EnvioUpdateContacto, EnvioUpdateOperativo, EnvioCambioEstado, DireccionOut,
-    EventoHistorialOut, EventoAuditoriaOut, MovimientoCreate,EnvioPublicoOut
+    EventoHistorialOut, EventoAuditoriaOut, MovimientoCreate, EnvioPublicoOut
 )
 
 from ml_predictor import predecir_prioridad
