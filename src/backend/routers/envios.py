@@ -222,7 +222,7 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
             Envio.estado != "ELIMINADO"
         )
         .first()
-)
+    )
     if not envio:
         raise HTTPException(
             status_code=404,
