@@ -4,7 +4,58 @@ from datetime import date, datetime
 from uuid import UUID
 import re
 
-from models import EstadoEnvioEnum, NivelPrioridadEnum
+from models import EstadoEnvioEnum, NivelPrioridadEnum, EstadoUsuarioEnum, AccionEnvioEnum
+
+
+_ROLES_VALIDOS = {"OPERADOR", "SUPERVISOR", "ADMINISTRADOR"}
+
+
+# ── Usuarios ──────────────────────────────────────────────────────────────────
+
+class UsuarioCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    email:      str = Field(..., min_length=1, max_length=255, examples=["operador@logitrack.com"])
+    password:   str = Field(..., min_length=8, max_length=128, examples=["Segura1234!"])
+    rol_nombre: str = Field(..., examples=["OPERADOR"])
+
+    @field_validator("email")
+    @classmethod
+    def email_formato_valido(cls, v: str) -> str:
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("El email no tiene un formato válido")
+        return v.lower()
+
+    @field_validator("rol_nombre")
+    @classmethod
+    def rol_debe_ser_valido(cls, v: str) -> str:
+        if v.upper() not in _ROLES_VALIDOS:
+            raise ValueError("El rol debe ser OPERADOR, SUPERVISOR o ADMINISTRADOR")
+        return v.upper()
+
+
+class UsuarioOut(BaseModel):
+    uuid:       UUID
+    email:      str
+    nombre_rol: str
+    estado:     EstadoUsuarioEnum
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Autenticación ─────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email:    str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+    email:        str
+    nombre_rol:   str
 
 
 # ── Dirección ────────────────────────────────────────────────────────────────
@@ -138,6 +189,22 @@ class EnvioOutDetalle(EnvioOut):
     estado_revertir:  Optional[str]          = None  # último estado del flujo normal (para revertir excepción)
 
 
+class EnvioPublicoOut(BaseModel):
+    """
+    Schema para consulta pública por tracking ID.
+    Expone solo datos no sensibles: tracking ID, estado, ciudades de origen/destino
+    y fecha estimada de entrega. No incluye nombres de personas ni datos de dirección
+    completos (calle, número, código postal). CA-2, CA-3.
+    """
+    tracking_id:            str
+    estado:                 EstadoEnvioEnum
+    fecha_entrega_estimada: date
+    ciudad_origen:          str
+    provincia_origen:       str
+    ciudad_destino:         str
+    provincia_destino:      str
+
+
 # ── Respuesta paginada ────────────────────────────────────────────────────────
 
 class EnvioListResponse(BaseModel):
@@ -184,3 +251,38 @@ class EnvioCambioEstado(BaseModel):
         "ciudad": "Mendoza", "provincia": "Mendoza", "codigo_postal": "5500",
     }])
     reusar_ubicacion_anterior: bool = Field(False, examples=[False])
+
+
+# ── Movimiento físico ─────────────────────────────────────────────────────────
+
+class MovimientoCreate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+
+    ubicacion: DireccionCreate = Field(..., examples=[{
+        "calle": "Ruta 9", "numero": "km 45",
+        "ciudad": "Rosario", "provincia": "Santa Fe", "codigo_postal": "2000",
+    }])
+
+
+# ── Historial de envío ────────────────────────────────────────────────────────
+
+class EventoHistorialOut(BaseModel):
+    accion:      AccionEnvioEnum
+    estado:      EstadoEnvioEnum
+    ubicacion:   Optional[DireccionOut] = None
+    fecha_hora:  datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Auditoría de envío (LP-174) ───────────────────────────────────────────────
+
+class EventoAuditoriaOut(BaseModel):
+    accion:         AccionEnvioEnum
+    estado_inicial: Optional[EstadoEnvioEnum] = None
+    estado_final:   EstadoEnvioEnum
+    ubicacion:      Optional[DireccionOut] = None
+    usuario_email:  str
+    fecha_hora:     datetime
+
+    model_config = {"from_attributes": True}

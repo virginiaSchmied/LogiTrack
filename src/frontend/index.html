@@ -13,264 +13,513 @@
 
 <a href="#main-content" class="skip-link">Ir al contenido principal</a>
 
-<!-- ══ NAVBAR ══ -->
-<nav class="navbar" role="navigation" aria-label="Navegación principal">
-  <div class="navbar-inner">
-    <a href="#" class="navbar-brand" aria-label="LogiTrack inicio">
-      <span class="brand-icon" aria-hidden="true">🚚</span>Logi<span class="brand-accent">Track</span>
-    </a>
-    <div class="nav-tabs" role="tablist" aria-label="Secciones">
-      <button id="tab-list" role="tab" aria-selected="true" aria-controls="view-list" class="active" onclick="showView('list')">📦 Envíos</button>
-      <button id="tab-form" role="tab" aria-selected="false" aria-controls="view-form" onclick="showView('form')">＋ Nuevo envío</button>
-    </div>
-    <div class="user-badge" aria-label="Usuario activo">
-      <span class="dot" aria-hidden="true"></span>
-      <span>Operador · sesión activa</span>
-    </div>
-  </div>
-</nav>
+<!-- ══ PANTALLA INICIAL (pública) ══ -->
+<div id="login-screen" style="display:none;" aria-label="Pantalla de inicio">
 
-<!-- ══ MAIN ══ -->
-<main id="main-content" class="main-container">
-
-  <!-- ════ LISTADO ════ -->
-  <section id="view-list" class="view active" role="tabpanel" aria-labelledby="tab-list">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Envíos registrados<span class="dot" aria-hidden="true">.</span></h1>
-        <p class="page-subtitle">Solo envíos activos · ordenados por Tracking ID</p>
-      </div>
-      <button class="btn btn-primary" onclick="showView('form')" aria-label="Registrar nuevo envío">＋ Nuevo envío</button>
+  <!-- Navbar pública -->
+  <nav class="navbar" role="navigation" aria-label="Navegación">
+    <div class="navbar-inner">
+      <a href="#" class="navbar-brand" aria-label="LogiTrack inicio">
+        <span class="brand-icon" aria-hidden="true">🚚</span>Logi<span class="brand-accent">Track</span>
+      </a>
+      <button class="btn btn-primary btn-sm" onclick="openLoginModal()" aria-label="Iniciar sesión en el sistema">
+        Iniciar sesión
+      </button>
     </div>
+  </nav>
 
-    <div class="card">
-      <div class="toolbar">
-        <div style="display:flex; align-items:center; gap:0.6rem;">
-          <span style="font-size:0.78rem; color:var(--text-sub);">Total:</span>
-          <span class="count-badge" id="count-chip" aria-live="polite" aria-label="Total de envíos">0</span>
+  <!-- Contenido principal: consulta pública -->
+  <main class="public-main" id="main-content">
+    <div class="public-hero">
+      <h1 class="public-hero-title">Consultá el estado de tu envío</h1>
+      <p class="public-hero-sub">Ingresá tu tracking ID para ver el estado actual. No necesitás cuenta.</p>
+      <div class="public-track" aria-label="Consulta pública de estado de envío">
+        <div class="public-track-row">
+          <label for="public-track-input" class="visually-hidden">Tracking ID</label>
+          <input type="text" class="form-control" id="public-track-input"
+            placeholder="Ej: LT-00000001" aria-label="Tracking ID del envío"
+            autocomplete="off" style="text-transform:uppercase"
+            onkeydown="if(event.key==='Enter') buscarPublico()"/>
+          <button class="btn btn-primary" onclick="buscarPublico()" aria-label="Consultar envío">
+            Consultar
+          </button>
+          <button class="btn btn-secondary" onclick="limpiarBusqueda()" aria-label="Limpiar búsqueda">
+            Limpiar
+          </button>
         </div>
-        <div class="search-wrap">
-          <span class="s-icon" aria-hidden="true">🔍</span>
-          <label for="search-input" class="visually-hidden">Buscar envíos</label>
-          <input type="search" class="form-control" id="search-input"
-            placeholder="Buscar por tracking ID, remitente o destinatario…"
-            aria-label="Buscar envíos" autocomplete="off"/>
-        </div>
-      </div>
-
-      <div class="empty-state" id="empty-state" role="status" aria-live="polite">
-        <div class="e-icon" aria-hidden="true">📭</div>
-        <div class="e-title">No hay envíos registrados</div>
-        <p class="e-desc">Registrá el primer envío usando el botón de arriba.</p>
-      </div>
-
-      <div class="table-wrap">
-        <table class="table" id="envios-table" style="display:none;" role="table" aria-label="Listado de envíos">
-          <thead>
-            <tr>
-              <th scope="col">Tracking ID</th>
-              <th scope="col">Remitente</th>
-              <th scope="col">Destinatario</th>
-              <th scope="col">Ciudad Origen</th>
-              <th scope="col">Ciudad Destino</th>
-              <th scope="col">Estado</th>
-              <th scope="col">Prioridad</th>
-              <th scope="col">Entrega estimada</th>
-            </tr>
-          </thead>
-          <tbody id="table-body"></tbody>
-        </table>
-      </div>
-
-      <nav class="paginacion" id="paginacion" style="display:none;" aria-label="Paginación de envíos">
-        <button class="btn btn-ghost btn-sm" id="btn-anterior" onclick="paginaAnterior()" aria-label="Página anterior">← Anterior</button>
-        <span class="pag-info" id="pag-info" aria-live="polite"></span>
-        <button class="btn btn-ghost btn-sm" id="btn-siguiente" onclick="paginaSiguiente()" aria-label="Página siguiente">Siguiente →</button>
-      </nav>
-
-      <div class="empty-state" id="no-results" style="display:none;" role="status" aria-live="polite">
-        <div class="e-icon" aria-hidden="true">🔍</div>
-        <div class="e-title">Sin resultados</div>
-        <p class="e-desc">Ningún envío coincide con tu búsqueda.</p>
+        <div id="public-track-result" aria-live="polite"></div>
       </div>
     </div>
-  </section>
+  </main>
 
-  <!-- ════ FORMULARIO DE ALTA ════ -->
-  <section id="view-form" class="view" role="tabpanel" aria-labelledby="tab-form">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Nuevo envío<span class="dot" aria-hidden="true">.</span></h1>
-        <p class="page-subtitle">
-          Campos marcados con <span style="color:var(--danger)" aria-label="obligatorio">*</span> son obligatorios
-        </p>
-      </div>
-      <button class="btn btn-ghost" onclick="showView('list')" aria-label="Volver al listado">← Volver al listado</button>
+</div>
+
+<!-- ══ MODAL DE LOGIN ══ -->
+<div id="login-modal" class="modal-overlay" style="display:none;" onclick="closeLoginModal()" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+  <div class="modal-box login-modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="login-modal-title" id="login-modal-title">Iniciar sesión</span>
+      <button class="modal-close" onclick="closeLoginModal()" aria-label="Cerrar">✕</button>
     </div>
-
-    <div class="card">
-      <form id="alta-form" novalidate aria-label="Formulario de alta de envío" onsubmit="event.preventDefault(); submitForm();">
-
-        <!-- Tracking ID -->
-        <div class="section-title" aria-hidden="true">Tracking ID</div>
-        <div class="tracking-box mb-4" role="status" aria-live="polite">
-          <span class="t-label" aria-hidden="true">ID del envío</span>
-          <span class="t-value" id="tracking-display">(se asignará al registrar)</span>
-          <span class="t-chip">Auto</span>
+    <div class="modal-body">
+      <p class="login-subtitle">Accedé al sistema con tus credenciales asignadas.</p>
+      <div class="login-error" id="login-error" role="alert" aria-live="assertive"></div>
+      <form id="login-form" novalidate aria-label="Formulario de inicio de sesión" onsubmit="event.preventDefault(); submitLogin();">
+        <div class="form-group mb-3">
+          <label class="form-label" for="login-email">
+            Email <span class="req" aria-label="obligatorio">*</span>
+          </label>
+          <input type="email" class="form-control" id="login-email"
+            placeholder="usuario@logitrack.com"
+            aria-required="true" aria-invalid="false"
+            aria-describedby="err-login-email"
+            autocomplete="email" inputmode="email"/>
+          <div class="field-error" id="err-login-email" role="alert" aria-live="polite"></div>
         </div>
-
-        <!-- Datos generales -->
-        <div class="section-title" aria-hidden="true">Datos generales</div>
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="remitente">Nombre del remitente <span class="req" aria-label="obligatorio">*</span></label>
-              <input type="text" class="form-control" id="remitente" name="remitente"
-                placeholder="Ej: Juan Pérez" aria-required="true" aria-invalid="false"
-                aria-describedby="err-remitente" autocomplete="name"/>
-              <div class="field-error" id="err-remitente" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="destinatario">Nombre del destinatario <span class="req" aria-label="obligatorio">*</span></label>
-              <input type="text" class="form-control" id="destinatario" name="destinatario"
-                placeholder="Ej: María García" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destinatario" autocomplete="off"/>
-              <div class="field-error" id="err-destinatario" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="fecha-entrega">Fecha estimada de entrega <span class="req" aria-label="obligatorio">*</span></label>
-              <input type="date" class="form-control" id="fecha-entrega" name="fecha-entrega"
-                aria-required="true" aria-invalid="false" aria-describedby="err-fecha-entrega"/>
-              <div class="field-error" id="err-fecha-entrega" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="prob-retraso">Probabilidad de retraso <span class="req" aria-label="obligatorio">*</span></label>
-              <input type="number" class="form-control" id="prob-retraso" name="prob-retraso"
-                placeholder="Ej: 0.75" min="0" max="1" step="0.01"
-                aria-required="true" aria-invalid="false" aria-describedby="err-prob-retraso help-prob-retraso"/>
-              <div class="form-text" id="help-prob-retraso">Valor entre 0 y 1. La prioridad se clasificará automáticamente.</div>
-              <div class="field-error" id="err-prob-retraso" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
+        <div class="form-group mb-4">
+          <label class="form-label" for="login-password">
+            Contraseña <span class="req" aria-label="obligatorio">*</span>
+          </label>
+          <input type="password" class="form-control" id="login-password"
+            placeholder="••••••••"
+            aria-required="true" aria-invalid="false"
+            aria-describedby="err-login-password"
+            autocomplete="current-password"/>
+          <div class="field-error" id="err-login-password" role="alert" aria-live="polite"></div>
         </div>
-
-        <!-- Dirección de origen -->
-        <div class="section-title" aria-hidden="true">Dirección de origen</div>
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="origen-calle">Calle <span class="req">*</span></label>
-              <input type="text" class="form-control" id="origen-calle"
-                placeholder="Ej: Av. Corrientes" aria-required="true" aria-invalid="false"
-                aria-describedby="err-origen-calle"/>
-              <div class="field-error" id="err-origen-calle" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="form-group">
-              <label class="form-label" for="origen-numero">Número <span class="req">*</span></label>
-              <input type="text" class="form-control" id="origen-numero"
-                placeholder="Ej: 1234" aria-required="true" aria-invalid="false"
-                aria-describedby="err-origen-numero" inputmode="numeric"/>
-              <div class="field-error" id="err-origen-numero" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="form-group">
-              <label class="form-label" for="origen-cp">Código postal <span class="req">*</span></label>
-              <input type="text" class="form-control" id="origen-cp"
-                placeholder="Ej: 1043" aria-required="true" aria-invalid="false"
-                aria-describedby="err-origen-cp" inputmode="numeric"/>
-              <div class="field-error" id="err-origen-cp" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="origen-ciudad">Ciudad <span class="req">*</span></label>
-              <input type="text" class="form-control" id="origen-ciudad"
-                placeholder="Ej: Rosario" aria-required="true" aria-invalid="false"
-                aria-describedby="err-origen-ciudad"/>
-              <div class="field-error" id="err-origen-ciudad" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="origen-provincia">Provincia <span class="req">*</span></label>
-              <input type="text" class="form-control" id="origen-provincia"
-                placeholder="Ej: Santa Fe" aria-required="true" aria-invalid="false"
-                aria-describedby="err-origen-provincia"/>
-              <div class="field-error" id="err-origen-provincia" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Dirección de destino -->
-        <div class="section-title" aria-hidden="true">Dirección de destino</div>
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="destino-calle">Calle <span class="req">*</span></label>
-              <input type="text" class="form-control" id="destino-calle"
-                placeholder="Ej: San Martín" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destino-calle"/>
-              <div class="field-error" id="err-destino-calle" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="form-group">
-              <label class="form-label" for="destino-numero">Número <span class="req">*</span></label>
-              <input type="text" class="form-control" id="destino-numero"
-                placeholder="Ej: 567" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destino-numero" inputmode="numeric"/>
-              <div class="field-error" id="err-destino-numero" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="form-group">
-              <label class="form-label" for="destino-cp">Código postal <span class="req">*</span></label>
-              <input type="text" class="form-control" id="destino-cp"
-                placeholder="Ej: 2000" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destino-cp" inputmode="numeric"/>
-              <div class="field-error" id="err-destino-cp" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="destino-ciudad">Ciudad <span class="req">*</span></label>
-              <input type="text" class="form-control" id="destino-ciudad"
-                placeholder="Ej: Rosario" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destino-ciudad"/>
-              <div class="field-error" id="err-destino-ciudad" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label" for="destino-provincia">Provincia <span class="req">*</span></label>
-              <input type="text" class="form-control" id="destino-provincia"
-                placeholder="Ej: Santa Fe" aria-required="true" aria-invalid="false"
-                aria-describedby="err-destino-provincia"/>
-              <div class="field-error" id="err-destino-provincia" role="alert" aria-live="polite"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Acciones -->
-        <div class="form-footer">
-          <button type="button" class="btn btn-ghost" onclick="resetForm()">Limpiar</button>
-          <button type="submit" class="btn btn-primary">Registrar envío</button>
-        </div>
-
+        <button type="submit" class="btn btn-primary" onclick="limpiarBusqueda()" id="btn-login" aria-label="Ingresar al sistema" style="width:100%">
+          Ingresar
+        </button>
       </form>
     </div>
-  </section>
+  </div>
+</div>
 
-</main>
+
+<!-- ══ APP WRAPPER (visible solo cuando está autenticado) ══ -->
+<div id="app-wrapper" style="display:none;">
+
+  <!-- ══ NAVBAR ══ -->
+  <nav class="navbar" role="navigation" aria-label="Navegación principal">
+    <div class="navbar-inner">
+      <a href="#" class="navbar-brand" aria-label="LogiTrack inicio">
+        <span class="brand-icon" aria-hidden="true">🚚</span>Logi<span class="brand-accent">Track</span>
+      </a>
+
+      <!-- Tabs de navegación: solo para OPERADOR y SUPERVISOR -->
+      <div class="nav-tabs" id="nav-tabs-envios" role="tablist" aria-label="Secciones" style="display:none;">
+        <button id="tab-list" role="tab" aria-selected="true" aria-controls="view-list" class="active" onclick="showView('list')">📦 Envíos</button>
+        <button id="tab-form" role="tab" aria-selected="false" aria-controls="view-form" onclick="showView('form')">＋ Nuevo envío</button>
+      </div>
+
+      <!-- Info de usuario + logout -->
+      <div class="navbar-user">
+        <div class="user-badge" id="user-badge" aria-label="Usuario activo">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="user-badge-text">Sesión activa</span>
+        </div>
+        <button class="btn-logout" onclick="logout()" aria-label="Cerrar sesión">
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ══ MAIN ══ -->
+  <main id="main-content" class="main-container">
+
+    <!-- ════ LISTADO ════ (OPERADOR + SUPERVISOR) -->
+    <section id="view-list" class="view" role="tabpanel" aria-labelledby="tab-list" style="display:none;">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Envíos registrados<span class="dot" aria-hidden="true">.</span></h1>
+          <p class="page-subtitle">Solo envíos activos · ordenados por Tracking ID</p>
+        </div>
+        <button id="btn-nuevo-envio" class="btn btn-primary" onclick="showView('form')" aria-label="Registrar nuevo envío" style="display:none;">＋ Nuevo envío</button>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span style="font-size:0.78rem; color:var(--text-sub);">Total:</span>
+            <span class="count-badge" id="count-chip" aria-live="polite" aria-label="Total de envíos">0</span>
+          </div>
+          <div class="search-wrap">
+            <span class="s-icon" aria-hidden="true">🔍</span>
+            <label for="search-input" class="visually-hidden">Buscar envíos</label>
+            <input type="search" class="form-control" id="search-input"
+              placeholder="Buscar por tracking ID, remitente o destinatario…"
+              aria-label="Buscar envíos" autocomplete="off"/>
+          </div>
+        </div>
+
+        <div class="empty-state" id="empty-state" role="status" aria-live="polite">
+          <div class="e-icon" aria-hidden="true">📭</div>
+          <div class="e-title">No hay envíos registrados</div>
+          <p class="e-desc">Registrá el primer envío usando el botón de arriba.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="envios-table" style="display:none;" role="table" aria-label="Listado de envíos">
+            <thead>
+              <tr>
+                <th scope="col">Tracking ID</th>
+                <th scope="col">Remitente</th>
+                <th scope="col">Destinatario</th>
+                <th scope="col">Ciudad Origen</th>
+                <th scope="col">Ciudad Destino</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Prioridad</th>
+                <th scope="col">Entrega estimada</th>
+              </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+
+        <nav class="paginacion" id="paginacion" style="display:none;" aria-label="Paginación de envíos">
+          <button class="btn btn-ghost btn-sm" id="btn-anterior" onclick="paginaAnterior()" aria-label="Página anterior">← Anterior</button>
+          <span class="pag-info" id="pag-info" aria-live="polite"></span>
+          <button class="btn btn-ghost btn-sm" id="btn-siguiente" onclick="paginaSiguiente()" aria-label="Página siguiente">Siguiente →</button>
+        </nav>
+
+        <div class="empty-state" id="no-results" style="display:none;" role="status" aria-live="polite">
+          <div class="e-icon" aria-hidden="true">🔍</div>
+          <div class="e-title">Sin resultados</div>
+          <p class="e-desc">Ningún envío coincide con tu búsqueda.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ FORMULARIO DE ALTA ════ (OPERADOR + SUPERVISOR) -->
+    <section id="view-form" class="view" role="tabpanel" aria-labelledby="tab-form" style="display:none;">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Nuevo envío<span class="dot" aria-hidden="true">.</span></h1>
+          <p class="page-subtitle">
+            Campos marcados con <span style="color:var(--danger)" aria-label="obligatorio">*</span> son obligatorios
+          </p>
+        </div>
+        <button class="btn btn-ghost" onclick="showView('list')" aria-label="Volver al listado">← Volver al listado</button>
+      </div>
+
+      <div class="card">
+        <form id="alta-form" novalidate aria-label="Formulario de alta de envío" onsubmit="event.preventDefault(); submitForm();">
+
+          <!-- Tracking ID -->
+          <div class="section-title" aria-hidden="true">Tracking ID</div>
+          <div class="tracking-box mb-4" role="status" aria-live="polite">
+            <span class="t-label" aria-hidden="true">ID del envío</span>
+            <span class="t-value" id="tracking-display">(se asignará al registrar)</span>
+            <span class="t-chip">Auto</span>
+          </div>
+
+          <!-- Datos generales -->
+          <div class="section-title" aria-hidden="true">Datos generales</div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="remitente">Nombre del remitente <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="text" class="form-control" id="remitente" name="remitente"
+                  placeholder="Ej: Juan Pérez" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-remitente" autocomplete="name"/>
+                <div class="field-error" id="err-remitente" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="destinatario">Nombre del destinatario <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="text" class="form-control" id="destinatario" name="destinatario"
+                  placeholder="Ej: María García" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destinatario" autocomplete="off"/>
+                <div class="field-error" id="err-destinatario" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="fecha-entrega">Fecha estimada de entrega <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="date" class="form-control" id="fecha-entrega" name="fecha-entrega"
+                  aria-required="true" aria-invalid="false" aria-describedby="err-fecha-entrega"/>
+                <div class="field-error" id="err-fecha-entrega" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="prob-retraso">Probabilidad de retraso <span class="req" aria-label="obligatorio">*</span></label>
+                <input type="number" class="form-control" id="prob-retraso" name="prob-retraso"
+                  placeholder="Ej: 0.75" min="0" max="1" step="0.01"
+                  aria-required="true" aria-invalid="false" aria-describedby="err-prob-retraso help-prob-retraso"/>
+                <div class="form-text" id="help-prob-retraso">Valor entre 0 y 1. La prioridad se clasificará automáticamente.</div>
+                <div class="field-error" id="err-prob-retraso" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dirección de origen -->
+          <div class="section-title" aria-hidden="true">Dirección de origen</div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="origen-calle">Calle <span class="req">*</span></label>
+                <input type="text" class="form-control" id="origen-calle"
+                  placeholder="Ej: Av. Corrientes" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-origen-calle"/>
+                <div class="field-error" id="err-origen-calle" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="origen-numero">Número <span class="req">*</span></label>
+                <input type="text" class="form-control" id="origen-numero"
+                  placeholder="Ej: 1234" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-origen-numero" inputmode="numeric"/>
+                <div class="field-error" id="err-origen-numero" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="origen-cp">Código postal <span class="req">*</span></label>
+                <input type="text" class="form-control" id="origen-cp"
+                  placeholder="Ej: 1043" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-origen-cp" inputmode="numeric"/>
+                <div class="field-error" id="err-origen-cp" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="origen-ciudad">Ciudad <span class="req">*</span></label>
+                <input type="text" class="form-control" id="origen-ciudad"
+                  placeholder="Ej: Buenos Aires" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-origen-ciudad"/>
+                <div class="field-error" id="err-origen-ciudad" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="origen-provincia">Provincia <span class="req">*</span></label>
+                <input type="text" class="form-control" id="origen-provincia"
+                  placeholder="Ej: CABA" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-origen-provincia"/>
+                <div class="field-error" id="err-origen-provincia" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dirección de destino -->
+          <div class="section-title" aria-hidden="true">Dirección de destino</div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="destino-calle">Calle <span class="req">*</span></label>
+                <input type="text" class="form-control" id="destino-calle"
+                  placeholder="Ej: San Martín" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destino-calle"/>
+                <div class="field-error" id="err-destino-calle" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="destino-numero">Número <span class="req">*</span></label>
+                <input type="text" class="form-control" id="destino-numero"
+                  placeholder="Ej: 567" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destino-numero" inputmode="numeric"/>
+                <div class="field-error" id="err-destino-numero" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label class="form-label" for="destino-cp">Código postal <span class="req">*</span></label>
+                <input type="text" class="form-control" id="destino-cp"
+                  placeholder="Ej: 2000" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destino-cp" inputmode="numeric"/>
+                <div class="field-error" id="err-destino-cp" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="destino-ciudad">Ciudad <span class="req">*</span></label>
+                <input type="text" class="form-control" id="destino-ciudad"
+                  placeholder="Ej: Rosario" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destino-ciudad"/>
+                <div class="field-error" id="err-destino-ciudad" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label" for="destino-provincia">Provincia <span class="req">*</span></label>
+                <input type="text" class="form-control" id="destino-provincia"
+                  placeholder="Ej: Santa Fe" aria-required="true" aria-invalid="false"
+                  aria-describedby="err-destino-provincia"/>
+                <div class="field-error" id="err-destino-provincia" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="form-footer">
+            <button type="button" class="btn btn-ghost" onclick="resetForm()">Limpiar</button>
+            <button type="submit" class="btn btn-primary">Registrar envío</button>
+          </div>
+
+        </form>
+      </div>
+    </section>
+
+    <!-- ════ VISTA ADMINISTRADOR ════ -->
+    <section id="view-admin" class="view" role="main" style="display:none;">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Panel de administración<span class="dot" aria-hidden="true">.</span></h1>
+          <p class="page-subtitle">Gestión de usuarios del sistema</p>
+        </div>
+      </div>
+
+      <!-- Tarjetas de acciones -->
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+        <div class="admin-card" style="cursor:pointer; opacity:1;" role="button" tabindex="0"
+          onclick="document.getElementById('modal-alta-usuario').style.display='flex'"
+          onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('modal-alta-usuario').style.display='flex'}"
+          aria-haspopup="dialog" aria-label="Abrir formulario de nuevo usuario">
+          <div class="ac-icon" aria-hidden="true">👤</div>
+          <div class="ac-label">+ Nuevo usuario</div>
+          <div class="ac-note">Registrar en el sistema</div>
+        </div>
+
+        <div class="admin-card" style="cursor:pointer; opacity:1;" role="button" tabindex="0"
+          onclick="mostrarAuditoria()"
+          onkeydown="if(event.key==='Enter'||event.key===' '){mostrarAuditoria()}"
+          aria-label="Ver auditoría de usuarios">
+          <div class="ac-icon" aria-hidden="true">📋</div>
+          <div class="ac-label">Auditoría de usuarios</div>
+          <div class="ac-note">Consultar historial</div>
+        </div>
+      </div>
+
+    <div id="modal-alta-usuario" role="dialog" aria-modal="true" aria-labelledby="modal-alta-titulo"
+      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:8px; padding:1.5rem; width:100%; max-width:560px; position:relative;">
+        
+        <button onclick="cerrarModalAlta()" aria-label="Cerrar" 
+          style="position:absolute; top:.75rem; right:.75rem; background:none; border:none; font-size:1.25rem; cursor:pointer;">✕</button>
+        
+        <div class="section-title" id="modal-alta-titulo">Alta de usuario</div>
+        
+        <div id="admin-registro-success" class="alert-success" role="status" aria-live="polite" style="display:none;"></div>
+        <div id="admin-registro-error" class="alert-error" role="alert" aria-live="assertive" style="display:none;"></div>
+        
+       <form id="form-alta-usuario" novalidate aria-label="Formulario de registro de usuario" onsubmit="event.preventDefault(); registrarUsuario();">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="nuevo-email">
+                Email <span class="req" aria-label="obligatorio">*</span>
+              </label>
+              <input type="email" class="form-control" id="nuevo-email"
+                placeholder="usuario@logitrack.com"
+                aria-required="true" aria-invalid="false"
+                aria-describedby="err-nuevo-email"
+                autocomplete="off" inputmode="email"/>
+              <div class="field-error" id="err-nuevo-email" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="nuevo-password">
+                Contraseña <span class="req" aria-label="obligatorio">*</span>
+              </label>
+              <input type="password" class="form-control" id="nuevo-password"
+                placeholder="Mínimo 8 caracteres"
+                aria-required="true" aria-invalid="false"
+                aria-describedby="err-nuevo-password help-nuevo-password"
+                autocomplete="new-password"/>
+              <div class="form-text" id="help-nuevo-password">La contraseña se almacenará de forma segura (hash bcrypt).</div>
+              <div class="field-error" id="err-nuevo-password" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label" for="nuevo-rol">
+                Rol <span class="req" aria-label="obligatorio">*</span>
+              </label>
+              <select class="form-control" id="nuevo-rol"
+                aria-required="true" aria-invalid="false"
+                aria-describedby="err-nuevo-rol">
+                <option value="">— Seleccioná un rol —</option>
+                <option value="OPERADOR">Operador</option>
+                <option value="SUPERVISOR">Supervisor</option>
+                <option value="ADMINISTRADOR">Administrador</option>
+              </select>
+              <div class="field-error" id="err-nuevo-rol" role="alert" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3" style="display:flex; gap:.5rem; justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="cerrarModalAlta()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-registrar-usuario" aria-label="Registrar nuevo usuario">
+            Registrar usuario
+          </button>
+        </div>
+      </form>
+      </div>
+    </div>
+
+
+
+    <!-- === AUDITORÍA === -->
+    <div id="auditoria-container" style="display:none; margin-top:1.5rem;">
+
+        <div class="auditoria-header">
+          <h3 style="margin:0;">Auditoría de usuarios</h3>
+          <button class="btn btn-ghost btn-sm" onclick="cerrarAuditoria()" aria-label="Cerrar auditoría">✕ Cerrar</button>
+        </div>
+
+        <!-- Filtros -->
+        <div class="row" style="margin-bottom:1rem;">
+            <div class="col-md-5">
+                <label>UUID Usuario Afectado</label>
+                <input id="filtro-afectado" class="form-control" placeholder="UUID">
+            </div>
+            <div class="col-md-5">
+                <label>UUID Usuario Ejecutor</label>
+                <input id="filtro-ejecutor" class="form-control" placeholder="UUID">
+            </div>
+            <div class="col-md-2" style="display:flex; align-items:flex-end; gap:.5rem; flex-wrap:wrap;">
+                <button class="btn btn-primary w-100" onclick="buscarAuditoria()">Buscar</button>
+                <button class="btn btn-ghost w-100" onclick="limpiarFiltrosAuditoria()" aria-label="Limpiar filtros UUID">Limpiar</button>
+            </div>
+        </div>
+
+        <div id="auditoria-mensaje" class="alert-info" style="display:none; margin-bottom:1rem;"></div>
+
+        <!-- Tabla -->
+        <table id="tabla-auditoria" class="table">
+            <thead>
+                <tr>
+                    <th>Acción</th>
+                    <th>Usuario Ejecutor</th>
+                    <th>Usuario Afectado</th>
+                    <th>Estado Inicial</th>
+                    <th>Estado Final</th>
+                    <th>Fecha y Hora</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <!-- Paginación -->
+        <div id="auditoria-paginacion" class="auditoria-pagination" style="display:none;" aria-label="Navegación de páginas de auditoría">
+          <button class="btn btn-ghost btn-sm" id="btn-pag-prev" onclick="cambiarPaginaAuditoria(-1)" aria-label="Página anterior">‹ Anterior</button>
+          <span id="auditoria-pag-info"></span>
+          <button class="btn btn-ghost btn-sm" id="btn-pag-next" onclick="cambiarPaginaAuditoria(1)" aria-label="Página siguiente">Siguiente ›</button>
+        </div>
+    </div>
+
+    </section>
+
+  </main>
+
+</div><!-- /#app-wrapper -->
+
 
 <!-- ══ MODAL DETALLE ══ -->
 <div id="modal-overlay" class="modal-overlay" style="display:none;" onclick="closeDetalle()" role="dialog" aria-modal="true" aria-labelledby="modal-tracking-id">
@@ -282,12 +531,84 @@
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;">
         <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Editar estado del envío">Editar estado</button>
+        <button class="btn btn-ghost btn-sm" id="btn-movimiento" style="display:none;" aria-label="Registrar movimiento">Registrar movimiento</button>
         <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
         <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
         <button class="modal-close" onclick="closeDetalle()" aria-label="Cerrar detalle">✕</button>
       </div>
     </div>
+    <div class="detalle-tabs-row">
+      <div class="edit-tabs-bar" id="detalle-tabs-bar">
+        <button class="edit-tab active" id="detalle-tab-info" onclick="switchDetalleTab('info')">Información</button>
+        <button class="edit-tab" id="detalle-tab-historial" onclick="switchDetalleTab('historial')">Historial</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-auditoria" onclick="openAuditoria()" aria-label="Ver auditoría del envío">Ver auditoría</button>
+    </div>
     <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══ MOVIMIENTO FÍSICO ══ -->
+<div id="movimiento-overlay" class="modal-overlay" style="display:none;" onclick="closeMovimiento()" role="dialog" aria-modal="true" aria-labelledby="movimiento-modal-tid">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <span class="modal-title-text">Registrar movimiento</span>
+        <span class="modal-tracking-id" id="movimiento-modal-tid"></span>
+      </div>
+      <button class="modal-close" onclick="closeMovimiento()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="mov-info-box">
+        <span class="mov-info-icon">📍</span>
+        <p class="mov-desc">Registrá la ubicación actual del envío. El estado no cambia.</p>
+      </div>
+      <div class="mov-form">
+        <div class="mov-field-full">
+          <label class="form-label" for="mov-calle">Calle <span class="req">*</span></label>
+          <input class="form-control" id="mov-calle" type="text" placeholder="Av. San Martín" autocomplete="off">
+        </div>
+        <div class="form-row-2">
+          <div>
+            <label class="form-label" for="mov-numero">Número <span class="req">*</span></label>
+            <input class="form-control" id="mov-numero" type="text" placeholder="1234" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label" for="mov-cp">Cód. postal <span class="req">*</span></label>
+            <input class="form-control" id="mov-cp" type="text" placeholder="2000" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div>
+            <label class="form-label" for="mov-ciudad">Ciudad <span class="req">*</span></label>
+            <input class="form-control" id="mov-ciudad" type="text" placeholder="Rosario" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label" for="mov-provincia">Provincia <span class="req">*</span></label>
+            <input class="form-control" id="mov-provincia" type="text" placeholder="Santa Fe" autocomplete="off">
+          </div>
+        </div>
+        <div id="mov-error" class="field-error"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeMovimiento()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-mov-confirmar" onclick="confirmarMovimiento()">Confirmar movimiento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AUDITORÍA ══ -->
+<div id="auditoria-overlay" class="modal-overlay" style="display:none;" onclick="closeAuditoria()" role="dialog" aria-modal="true" aria-labelledby="auditoria-tracking-id">
+  <div class="modal-box auditoria-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span class="modal-label">Auditoría</span>
+        <span class="modal-tracking-id" id="auditoria-tracking-id"></span>
+      </div>
+      <button class="modal-close" onclick="closeAuditoria()" aria-label="Cerrar auditoría">✕</button>
+    </div>
+    <div class="modal-body" id="auditoria-body"></div>
   </div>
 </div>
 
@@ -311,6 +632,7 @@
     </div>
   </div>
 </div>
+
 
 <!-- ══ MODAL CAMBIO ESTADO ══ -->
 <div id="estado-overlay" class="modal-overlay" style="display:none;" onclick="closeEstado()" role="dialog" aria-modal="true" aria-labelledby="estado-modal-tid">

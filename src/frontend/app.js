@@ -1,12 +1,52 @@
 'use strict';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://18.191.173.105:8000";
+const API_BASE = "http://localhost:8000"; 
+//"http://18.191.173.105:8000";
+
+// ─── Estado de autenticación ──────────────────────────────────────────────────
+let _token    = null;
+let _userEmail = null;
+let _userRole  = null;   // "OPERADOR" | "SUPERVISOR" | "ADMINISTRADOR"
+
+const LS_TOKEN = "lt_token";
+const LS_EMAIL = "lt_email";
+const LS_ROLE  = "lt_role";
+
+function loadAuthState() {
+  _token     = localStorage.getItem(LS_TOKEN) || null;
+  _userEmail = localStorage.getItem(LS_EMAIL) || null;
+  _userRole  = localStorage.getItem(LS_ROLE)  || null;
+}
+
+function saveAuthState(token, email, role) {
+  _token     = token;
+  _userEmail = email;
+  _userRole  = role;
+  localStorage.setItem(LS_TOKEN, token);
+  localStorage.setItem(LS_EMAIL, email);
+  localStorage.setItem(LS_ROLE,  role);
+}
+
+function clearAuthState() {
+  _token = _userEmail = _userRole = null;
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_EMAIL);
+  localStorage.removeItem(LS_ROLE);
+}
+
+function isAuthenticated() {
+  return !!_token;
+}
+
+function authHeaders() {
+  const token = _token || localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // ─── Mapa de badges por estado ────────────────────────────────────────────────
 const BADGE_CLASS = {
   'REGISTRADO':      'badge-registrado',
-  'EN_DEPOSITO':     'badge-deposito',
   'EN_TRANSITO':     'badge-transito',
   'EN_SUCURSAL':     'badge-sucursal',
   'EN_DISTRIBUCION': 'badge-distribucion',
@@ -19,7 +59,6 @@ const BADGE_CLASS = {
 
 const BADGE_LABEL = {
   'REGISTRADO':      'Registrado',
-  'EN_DEPOSITO':     'En depósito',
   'EN_TRANSITO':     'En tránsito',
   'EN_SUCURSAL':     'En sucursal',
   'EN_DISTRIBUCION': 'En distribución',
@@ -50,18 +89,282 @@ function prioridadBadge(prioridad) {
   return `<span class="badge ${cls}">${escHtml(label)}</span>`;
 }
 
+// ─── Init de la aplicación ────────────────────────────────────────────────────
+function initApp() {
+  loadAuthState();
+  if (isAuthenticated()) {
+    showApp();
+  } else {
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = '';
+  document.getElementById('app-wrapper').style.display  = 'none';
+  closeLoginModal();
+}
+
+function openLoginModal() {
+  document.getElementById('login-modal').style.display = '';
+  document.getElementById('login-email').value    = '';
+  document.getElementById('login-password').value = '';
+  _hideLoginError();
+  _clearLoginFieldError('login-email');
+  _clearLoginFieldError('login-password');
+  setTimeout(() => document.getElementById('login-email').focus(), 50);
+} 
+
+function closeLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-wrapper').style.display  = '';
+  applyRoleUI();
+}
+
+// ─── Aplicar la UI según el rol ───────────────────────────────────────────────
+// LP-102: la interfaz muestra u oculta opciones según el rol del usuario.
+function applyRoleUI() {
+  const role = _userRole;
+
+  // Actualizar el badge de usuario en el navbar
+  const badgeText = document.getElementById('user-badge-text');
+  if (badgeText) {
+    const roleLabel = { OPERADOR: 'Operador', SUPERVISOR: 'Supervisor', ADMINISTRADOR: 'Administrador' }[role] || role;
+    badgeText.textContent = `${roleLabel} · ${_userEmail || ''}`;
+  }
+
+  const navTabsEnvios = document.getElementById('nav-tabs-envios');
+  const viewList      = document.getElementById('view-list');
+  const viewForm      = document.getElementById('view-form');
+  const viewAdmin     = document.getElementById('view-admin');
+  const btnNuevoEnvio = document.getElementById('btn-nuevo-envio');
+
+  if (role === 'ADMINISTRADOR') {
+    // LP-102 CA-3: Admin solo ve gestión de usuarios
+    if (navTabsEnvios) navTabsEnvios.style.display = 'none';
+    if (viewAdmin) { viewAdmin.style.display = ''; viewAdmin.classList.add('active'); }
+    if (viewList)  viewList.style.display  = 'none';
+    if (viewForm)  viewForm.style.display  = 'none';
+  } else {
+    // OPERADOR o SUPERVISOR: muestran envíos
+    if (navTabsEnvios) navTabsEnvios.style.display = '';
+    if (viewAdmin) viewAdmin.style.display = 'none';
+
+    // El botón "Nuevo envío" es visible para ambos (LP-102 CA-1 y CA-2)
+    if (btnNuevoEnvio) btnNuevoEnvio.style.display = '';
+
+    // Mostrar la vista de listado como activa por defecto
+    showView('list');
+  }
+}
+
+// ─── Redirigir a login ante error 401 ────────────────────────────────────────
+// LP-21 CA-7 / LP-250 CA-1
+async function handleApiError(res) {
+  if (res.status === 401) {
+    clearAuthState();
+    showLoginScreen();
+    openLoginModal();
+    return true; // fue un 401
+  }
+  return false;
+}
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+async function submitLogin() {
+  const emailEl = document.getElementById('login-email');
+  const passEl  = document.getElementById('login-password');
+  const btn     = document.getElementById('btn-login');
+
+  // Validar campos vacíos (LP-21 CA-4)
+  let valid = true;
+  if (!emailEl.value.trim()) {
+    _setLoginFieldError('login-email', 'Ingresá tu email.');
+    valid = false;
+  } else {
+    _clearLoginFieldError('login-email');
+  }
+  if (!passEl.value) {
+    _setLoginFieldError('login-password', 'Ingresá tu contraseña.');
+    valid = false;
+  } else {
+    _clearLoginFieldError('login-password');
+  }
+  if (!valid) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Ingresando…';
+  _hideLoginError();
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailEl.value.trim(), password: passEl.value }),
+    });
+
+    if (!res.ok) {
+      // LP-21 CA-3: mensaje genérico sin revelar qué campo es incorrecto
+      _showLoginError('Email o contraseña incorrectos. Verificá tus datos e intentá de nuevo.');
+      return;
+    }
+
+    const data = await res.json();
+    saveAuthState(data.access_token, data.email, data.nombre_rol);
+    showApp();
+
+    closeLoginModal();
+
+
+  } catch (err) {
+    console.error('Error al iniciar sesión:', err);
+    _showLoginError('No se pudo conectar con el servidor. Verificá que el sistema esté disponible.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingresar';
+  }
+}
+
+function _showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function _hideLoginError() {
+  const el = document.getElementById('login-error');
+  el.classList.remove('visible');
+  el.textContent = '';
+}
+
+function _setLoginFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'true');
+  if (error) { error.textContent = msg; error.classList.add('visible'); }
+}
+
+function _clearLoginFieldError(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+// LP-99: cierra sesión e invalida el token en el cliente.
+async function logout() {
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+  } catch (err) {
+    console.warn('Error al registrar logout en el servidor:', err);
+    // El logout en el cliente procede aunque el servidor falle
+  }
+  clearAuthState();
+  showLoginScreen();
+}
+
+// ─── Consulta pública por tracking ID (CA-2, CA-3, CA-4, CA-5) ──────────────
+async function buscarPublico() {
+  const input      = document.getElementById('public-track-input');
+  const resultEl   = document.getElementById('public-track-result');
+  const trackingId = input.value.trim().toUpperCase();
+
+  if (!trackingId) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `<p class="track-error">Ingresá un tracking ID.</p>`;
+    return;
+  }
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = `<p style="font-size:.82rem;color:var(--text-sub)">Consultando…</p>`;
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/publico/${encodeURIComponent(trackingId)}`);
+    if (res.status === 404) {
+      resultEl.innerHTML = `<p class="track-error">No se encontró ningún envío con el tracking ID <strong>${escHtml(trackingId)}</strong>. Verificá el código e intentá nuevamente.</p>`;
+      return;
+    }
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    const e = await res.json();
+    resultEl.innerHTML = `
+      <div class="track-result-card">
+        <div class="track-result-header">
+          <span class="track-result-tid">${escHtml(e.tracking_id)}</span>
+          <span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>
+        </div>
+        <div class="detail-grid" style="margin-top:.85rem">
+          <div class="detail-section">
+            <div class="section-title">Estado del envío</div>
+            <dl class="detail-list">
+              <div class="dl-row">
+                <dt>Entrega estimada</dt>
+                <dd class="mono-text">${escHtml(formatFecha(e.fecha_entrega_estimada))}</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="detail-cols">
+            <div class="detail-section">
+              <div class="section-title">Origen</div>
+              <dl class="detail-list">
+                <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.ciudad_origen)}</dd></div>
+                <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.provincia_origen)}</dd></div>
+              </dl>
+            </div>
+            <div class="detail-section">
+              <div class="section-title">Destino</div>
+              <dl class="detail-list">
+                <div class="dl-row"><dt>Ciudad</dt><dd>${escHtml(e.ciudad_destino)}</dd></div>
+                <div class="dl-row"><dt>Provincia</dt><dd>${escHtml(e.provincia_destino)}</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  } catch (err) {
+    console.error('Error en consulta pública:', err);
+    resultEl.innerHTML = `<p class="track-error">No se pudo conectar con el servidor.</p>`;
+  }
+}
+
+
+function limpiarBusqueda() {
+  document.getElementById('public-track-input').value = '';
+  const resultEl = document.getElementById('public-track-result');
+  resultEl.style.display = 'none';
+  resultEl.innerHTML = '';
+}
+
 // ─── Navegación ───────────────────────────────────────────────────────────────
 function showView(viewName) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  // Ocultar todas las vistas
+  document.querySelectorAll('.view').forEach(v => {
+    v.style.display = 'none';
+    v.classList.remove('active');
+  });
   document.querySelectorAll('.nav-tabs button').forEach(b => {
     b.classList.remove('active');
     b.removeAttribute('aria-current');
   });
 
-  document.getElementById('view-' + viewName).classList.add('active');
+  const view = document.getElementById('view-' + viewName);
+  if (view) {
+    view.style.display = '';
+    view.classList.add('active');
+  }
   const tab = document.getElementById('tab-' + viewName);
-  tab.classList.add('active');
-  tab.setAttribute('aria-current', 'page');
+  if (tab) {
+    tab.classList.add('active');
+    tab.setAttribute('aria-current', 'page');
+  }
 
   if (viewName === 'form') resetForm();
   if (viewName === 'list') {
@@ -112,7 +415,9 @@ async function cargarEnvios(q = '', page = 1) {
     if (q.trim()) params.set('q', q.trim());
     const url = `${API_BASE}/envios?${params}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: authHeaders() });
+
+    if (await handleApiError(res)) return; // 401 → ya redirigió a login
     if (!res.ok) throw new Error(`Error ${res.status}`);
 
     const data  = await res.json();
@@ -182,6 +487,7 @@ function formatDatetime(iso) {
   return d.toLocaleDateString('es-AR') + ' · ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
+
 // ─── Grafo de transiciones de estado ─────────────────────────────────────────
 const TRANSICIONES_VALIDAS = {
   'REGISTRADO':      ['EN_DEPOSITO', 'CANCELADO'],
@@ -191,7 +497,7 @@ const TRANSICIONES_VALIDAS = {
   'EN_DISTRIBUCION': ['ENTREGADO', 'RETRASADO'],
   'ENTREGADO':       [],
   'RETRASADO':       ['EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION'],
-  'BLOQUEADO':       ['EN_DEPOSITO', 'EN_SUCURSAL'],
+  'BLOQUEADO':       ['EN_TRANSITO', 'EN_SUCURSAL'],
   'CANCELADO':       [],
   'ELIMINADO':       [],
 };
@@ -200,8 +506,54 @@ const ESTADOS_EXCEPCION              = ['RETRASADO', 'CANCELADO', 'BLOQUEADO'];
 const FLUJO_NORMAL                   = ['REGISTRADO', 'EN_DEPOSITO', 'EN_TRANSITO', 'EN_SUCURSAL', 'EN_DISTRIBUCION', 'ENTREGADO'];
 const ESTADOS_UBICACION_OBLIGATORIA  = ['EN_DEPOSITO', 'EN_SUCURSAL', 'ENTREGADO'];
 
+
+// ─── Historial ────────────────────────────────────────────────────────────────
+
+const ACCION_LABEL = {
+  'CREACION':      'Registro inicial',
+  'CAMBIO_ESTADO': 'Cambio de estado',
+  'MOVIMIENTO':    'Movimiento',
+};
+
+const ESTADOS_EXCEPCION_SET = new Set(['RETRASADO', 'CANCELADO', 'BLOQUEADO']);
+
+function renderHistorial(eventos) {
+  if (!eventos || eventos.length === 0) {
+    return `<p class="historial-empty">Sin movimientos registrados.</p>`;
+  }
+  const items = eventos.map((ev, i) => {
+    const esExcepcion = ESTADOS_EXCEPCION_SET.has(ev.estado);
+    const esUltimo    = i === eventos.length - 1;
+    const badgeHtml   = ev.accion === 'CAMBIO_ESTADO'
+      ? `<span class="badge ${BADGE_CLASS[ev.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[ev.estado] || ev.estado)}</span>`
+      : '';
+    const ubicHtml    = ev.ubicacion
+      ? `<span class="historial-ubic">${escHtml(ev.ubicacion.calle)} ${escHtml(ev.ubicacion.numero)}, ${escHtml(ev.ubicacion.ciudad)}, ${escHtml(ev.ubicacion.provincia)}</span>`
+      : '';
+    return `
+      <div class="historial-item${esUltimo ? ' historial-item--last' : ''}${esExcepcion ? ' historial-item--excepcion' : ''}">
+        <div class="historial-dot"></div>
+        <div class="historial-content">
+          <div class="historial-accion">${escHtml(ACCION_LABEL[ev.accion] || ev.accion)}${badgeHtml}</div>
+          ${ubicHtml}
+          <div class="historial-fecha mono-text">${escHtml(formatDatetime(ev.fecha_hora))}</div>
+        </div>
+      </div>`;
+  }).join('');
+  return `<div class="historial-timeline">${items}</div>`;
+}
+
+
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
-let _envioDetalle = null;
+let _envioDetalle   = null;
+let _detalleContent = { info: '', historial: '' };
+
+function switchDetalleTab(tab) {
+  const body = document.getElementById('modal-body');
+  document.getElementById('detalle-tab-info').classList.toggle('active', tab === 'info');
+  document.getElementById('detalle-tab-historial').classList.toggle('active', tab === 'historial');
+  body.innerHTML = _detalleContent[tab] || '';
+}
 
 async function openDetalle(trackingId) {
   const overlay  = document.getElementById('modal-overlay');
@@ -212,42 +564,91 @@ async function openDetalle(trackingId) {
   tidEl.textContent  = trackingId;
   estadoEl.innerHTML = '';
   body.innerHTML     = '<div class="modal-loading">Cargando detalle…</div>';
-  document.getElementById('btn-eliminar').style.display      = 'none';
-  document.getElementById('btn-editar').style.display        = 'none';
-  document.getElementById('btn-cambiar-estado').style.display = 'none';
+
+  // Reset botones
+  document.getElementById('btn-eliminar').style.display        = 'none';
+  document.getElementById('btn-editar').style.display          = 'none';
+  document.getElementById('btn-cambiar-estado').style.display  = 'none';
+  document.getElementById('btn-movimiento').style.display      = 'none';
+
+  // Tabs
+  document.getElementById('detalle-tab-info').classList.add('active');
+  document.getElementById('detalle-tab-historial').classList.remove('active');
+
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
   try {
-    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`);
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    const e = await res.json();
+    const [resDetalle, resHistorial] = await Promise.all([
+      fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`, {
+        headers: { ...authHeaders() }
+      }),
+      fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/historial`, {
+        headers: { ...authHeaders() }
+      }),
+    ]);
+
+    if (resDetalle.status === 401) {
+      throw new Error('No autorizado. Iniciá sesión nuevamente.');
+    }
+    if (!resDetalle.ok) {
+      throw new Error(`Error ${resDetalle.status}`);
+    }
+
+    const e         = await resDetalle.json();
+    const historial = resHistorial.ok ? await resHistorial.json() : [];
+
     _envioDetalle = e;
 
-    estadoEl.innerHTML = `<span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">${escHtml(BADGE_LABEL[e.estado] || e.estado)}</span>`;
+    estadoEl.innerHTML = `
+      <span class="badge ${BADGE_CLASS[e.estado] || 'badge-registrado'}">
+        ${escHtml(BADGE_LABEL[e.estado] || e.estado)}
+      </span>`;
 
     const btnEliminar      = document.getElementById('btn-eliminar');
     const btnEditar        = document.getElementById('btn-editar');
     const btnCambiarEstado = document.getElementById('btn-cambiar-estado');
+    const btnMovimiento    = document.getElementById('btn-movimiento');
 
-    // Edit (contacto/operativo): show for non-ELIMINADO, non-CANCELADO
+    // Editar
     if (e.estado !== 'ELIMINADO' && e.estado !== 'CANCELADO') {
       btnEditar.style.display = '';
       btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
     }
-    // Delete: only for CANCELADO
-    if (e.estado === 'CANCELADO') {
+
+    // Eliminar (solo SUPERVISOR y cancelado)
+    if (e.estado === 'CANCELADO' && _userRole === 'SUPERVISOR') {
       btnEliminar.style.display = '';
-      btnEliminar.onclick = () => openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
+      btnEliminar.onclick = () =>
+        openConfirmDelete(e.tracking_id, e.remitente, e.destinatario);
     }
-    // Editar estado: only when transitions exist
+
+    // Cambiar estado
     const transiciones = TRANSICIONES_VALIDAS[e.estado] || [];
     if (transiciones.length > 0) {
       btnCambiarEstado.style.display = '';
-      btnCambiarEstado.onclick = () => { closeDetalle(); openEstado(e.tracking_id, e.estado, e.ultima_ubicacion || null, e.estado_revertir || null); };
+      btnCambiarEstado.onclick = () => {
+        closeDetalle();
+        openEstado(
+          e.tracking_id,
+          e.estado,
+          e.ultima_ubicacion || null,
+          e.estado_revertir || null
+        );
+      };
     }
 
-    body.innerHTML = `
+    // Movimiento
+    if (!['ELIMINADO', 'ENTREGADO', 'CANCELADO'].includes(e.estado)) {
+      btnMovimiento.style.display = '';
+      btnMovimiento.onclick = () => {
+        closeDetalle();
+        openMovimiento(e.tracking_id);
+      };
+    }
+
+    // HTML INFO
+    const htmlInfo = `
       <div class="detail-grid">
 
         <div class="detail-section">
@@ -272,6 +673,7 @@ async function openDetalle(trackingId) {
               <div class="dl-row"><dt>Cód. postal</dt><dd class="mono-text">${escHtml(e.direccion_origen.codigo_postal)}</dd></div>
             </dl>
           </div>
+
           <div class="detail-section">
             <div class="section-title">Dirección de destino</div>
             <dl class="detail-list">
@@ -283,8 +685,21 @@ async function openDetalle(trackingId) {
           </div>
         </div>
 
-      </div>
-    `;
+      </div>`;
+
+    // HTML HISTORIAL
+    const htmlHistorial = `
+      <div class="historial-panel">
+        ${renderHistorial(historial)}
+      </div>`;
+
+    _detalleContent = {
+      info: htmlInfo,
+      historial: htmlHistorial
+    };
+
+    switchDetalleTab('info');
+
   } catch (err) {
     console.error('Error al cargar detalle:', err);
     body.innerHTML = `
@@ -301,8 +716,146 @@ function closeDetalle() {
   document.getElementById('btn-eliminar').style.display        = 'none';
   document.getElementById('btn-editar').style.display          = 'none';
   document.getElementById('btn-cambiar-estado').style.display  = 'none';
+  document.getElementById('btn-movimiento').style.display      = 'none';
   document.body.style.overflow = '';
   _envioDetalle = null;
+}
+
+// ─── Movimiento físico (LP-162) ───────────────────────────────────────────────
+
+function openMovimiento(trackingId) {
+  document.getElementById('movimiento-modal-tid').textContent = trackingId;
+  ['mov-calle','mov-numero','mov-cp','mov-ciudad','mov-provincia'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('mov-error').classList.remove('visible');
+  document.getElementById('movimiento-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMovimiento() {
+  document.getElementById('movimiento-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function confirmarMovimiento() {
+  const trackingId = document.getElementById('movimiento-modal-tid').textContent;
+  const errorEl    = document.getElementById('mov-error');
+  const btn        = document.getElementById('btn-mov-confirmar');
+
+  const calle    = document.getElementById('mov-calle').value.trim();
+  const numero   = document.getElementById('mov-numero').value.trim();
+  const cp       = document.getElementById('mov-cp').value.trim();
+  const ciudad   = document.getElementById('mov-ciudad').value.trim();
+  const provincia = document.getElementById('mov-provincia').value.trim();
+
+  if (!calle || !numero || !cp || !ciudad || !provincia) {
+    errorEl.textContent = 'Todos los campos de ubicación son obligatorios.';
+    errorEl.classList.add('visible');
+    return;
+  }
+
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/movimientos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ubicacion: { calle, numero, ciudad, provincia, codigo_postal: cp } }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Error ${res.status}`);
+    }
+    closeMovimiento();
+    openDetalle(trackingId);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar movimiento';
+  }
+}
+
+
+// ─── Auditoría (LP-174) ───────────────────────────────────────────────────────
+
+const ACCION_AUDITORIA_LABEL = {
+  'CREACION':      'Creación',
+  'MODIFICACION':  'Modificación',
+  'CAMBIO_ESTADO': 'Cambio de estado',
+  'MOVIMIENTO':    'Movimiento',
+  'ELIMINACION':   'Eliminación',
+};
+
+async function openAuditoria() {
+  if (!_envioDetalle) return;
+  const trackingId = _envioDetalle.tracking_id;
+
+  const overlay = document.getElementById('auditoria-overlay');
+  const body    = document.getElementById('auditoria-body');
+  document.getElementById('auditoria-tracking-id').textContent = trackingId;
+  body.innerHTML = '<div class="modal-loading">Cargando auditoría…</div>';
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/auditoria`);
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    const eventos = await res.json();
+
+    if (eventos.length === 0) {
+      body.innerHTML = `<p class="historial-empty">Sin eventos registrados.</p>`;
+      return;
+    }
+
+    const filas = eventos.map(ev => {
+      const accion    = escHtml(ACCION_AUDITORIA_LABEL[ev.accion] || ev.accion);
+      const badgeHtml = `<span class="badge ${BADGE_CLASS[ev.estado_final] || 'badge-registrado'}">${escHtml(BADGE_LABEL[ev.estado_final] || ev.estado_final)}</span>`;
+      const ubicHtml  = ev.ubicacion
+        ? escHtml(`${ev.ubicacion.calle} ${ev.ubicacion.numero}, ${ev.ubicacion.ciudad}, ${ev.ubicacion.provincia} (${ev.ubicacion.codigo_postal})`)
+        : '—';
+      const desde = ev.estado_inicial
+        ? `<span class="badge ${BADGE_CLASS[ev.estado_inicial] || 'badge-registrado'} badge-sm">${escHtml(BADGE_LABEL[ev.estado_inicial] || ev.estado_inicial)}</span>`
+        : '—';
+      return `
+        <tr>
+          <td data-label="Fecha">${escHtml(formatDatetime(ev.fecha_hora))}</td>
+          <td data-label="Acción"><span class="auditoria-accion auditoria-accion--${ev.accion.toLowerCase()}">${accion}</span></td>
+          <td data-label="Desde">${desde}</td>
+          <td data-label="Estado">${badgeHtml}</td>
+          <td data-label="Ubicación">${ubicHtml}</td>
+          <td data-label="Usuario" class="auditoria-usuario">${escHtml(ev.usuario_email)}</td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="auditoria-table-wrap">
+        <table class="auditoria-table">
+          <thead>
+            <tr>
+              <th>Fecha y hora</th>
+              <th>Acción</th>
+              <th>Desde</th>
+              <th>Estado resultante</th>
+              <th>Ubicación</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    body.innerHTML = `<div class="empty-state"><div class="e-icon">⚠️</div><div class="e-title">Error al cargar auditoría</div><p class="e-desc">${escHtml(err.message)}</p></div>`;
+  }
+}
+
+function closeAuditoria() {
+  document.getElementById('auditoria-overlay').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ─── Eliminación de envío ─────────────────────────────────────────────────────
@@ -330,7 +883,9 @@ async function confirmarEliminacion() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}`, {
       method: 'DELETE',
+      headers: authHeaders(),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) throw new Error(`Error ${res.status}`);
     showToast(trackingId, 'Envío eliminado correctamente');
     cargarEnvios(currentQuery, 1);
@@ -360,10 +915,17 @@ function openEstado(trackingId, estadoActual, ultimaUbicacion = null, estadoReve
   const badgeActual  = `<span class="badge ${BADGE_CLASS[estadoActual] || ''}">${escHtml(BADGE_LABEL[estadoActual] || estadoActual)}</span>`;
 
   // Si es reversible y tenemos el estado previo, mostrar solo esa opción; si no, usar el grafo completo
-  const transiciones = esReversible && estadoRevertir
+  // OPERADOR no puede asignar excepciones (RETRASADO/BLOQUEADO): solo SUPERVISOR puede
+  // OPERADOR no puede asignar excepciones ni cancelar: solo SUPERVISOR puede
+  const ESTADOS_SOLO_SUPERVISOR = ['RETRASADO', 'BLOQUEADO', 'CANCELADO'];
+  const transicionesBase = esReversible && estadoRevertir
     ? [estadoRevertir]
     : TRANSICIONES_VALIDAS[estadoActual] || [];
+  const transiciones = _userRole !== 'SUPERVISOR'
+    ? transicionesBase.filter(t => !ESTADOS_SOLO_SUPERVISOR.includes(t))
+    : transicionesBase;
 
+    
   let opcionesHtml = `
     <div class="estado-actual-row">
       <span class="form-label">Estado actual</span>
@@ -594,7 +1156,7 @@ async function _ejecutarCambioEstado() {
   try {
     const res = await fetch(endpoint, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -630,6 +1192,7 @@ async function confirmarCancelar() {
   closeConfirmCancelar();
   await _ejecutarCambioEstado();
 }
+
 
 // ─── Edición de envío ─────────────────────────────────────────────────────────
 let _trackingIdEnEdicion = null;
@@ -742,9 +1305,10 @@ async function submitEditContacto() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/contacto`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) {
       const err = await res.json();
       if (Array.isArray(err.detail)) {
@@ -809,9 +1373,10 @@ async function submitEditOperativo() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(_trackingIdEnEdicion)}/operativo`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+    if (await handleApiError(res)) return;
     if (!res.ok) {
       const err = await res.json();
       if (Array.isArray(err.detail)) {
@@ -1002,9 +1567,11 @@ async function submitForm() {
   try {
     const res = await fetch(`${API_BASE}/envios`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload),
     });
+
+    if (await handleApiError(res)) return;
 
     if (!res.ok) {
       const err = await res.json();
@@ -1066,31 +1633,287 @@ function escHtml(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ─── Alta de usuario (ADMINISTRADOR) ─────────────────────────────────────────
+function _setAdminFieldError(id, msg) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'true');
+  if (error) { error.textContent = msg; error.classList.add('visible'); }
+}
+
+function _clearAdminFieldError(id) {
+  const input = document.getElementById(id);
+  const error = document.getElementById('err-' + id);
+  if (input) input.setAttribute('aria-invalid', 'false');
+  if (error) error.classList.remove('visible');
+}
+
+async function registrarUsuario() {
+  const emailEl = document.getElementById('nuevo-email');
+  const passEl  = document.getElementById('nuevo-password');
+  const rolEl   = document.getElementById('nuevo-rol');
+  const btn     = document.getElementById('btn-registrar-usuario');
+  const successEl = document.getElementById('admin-registro-success');
+  const errorEl   = document.getElementById('admin-registro-error');
+
+  // Limpiar mensajes anteriores
+  successEl.style.display = 'none';
+  errorEl.style.display   = 'none';
+  ['nuevo-email', 'nuevo-password', 'nuevo-rol'].forEach(_clearAdminFieldError);
+
+  // CA-5: validar campos obligatorios
+  let valid = true;
+  if (!emailEl.value.trim()) {
+    _setAdminFieldError('nuevo-email', 'El email es obligatorio.');
+    valid = false;
+  }
+  if (!passEl.value) {
+    _setAdminFieldError('nuevo-password', 'La contraseña es obligatoria.');
+    valid = false;
+  } else if (passEl.value.length < 8) {
+    _setAdminFieldError('nuevo-password', 'La contraseña debe tener al menos 8 caracteres.');
+    valid = false;
+  }
+  // CA-4: rol obligatorio
+  if (!rolEl.value) {
+    _setAdminFieldError('nuevo-rol', 'El rol es obligatorio.');
+    valid = false;
+  }
+  if (!valid) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Registrando…';
+
+  try {
+    const res = await fetch(`${API_BASE}/usuarios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        email:      emailEl.value.trim(),
+        password:   passEl.value,
+        rol_nombre: rolEl.value,
+      }),
+    });
+
+    if (await handleApiError(res)) return;
+
+    if (res.status === 409) {
+      // CA-3: email ya registrado
+      const data = await res.json();
+      errorEl.textContent = data.detail || 'El email ya está registrado en el sistema.';
+      errorEl.style.display = '';
+      return;
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg = Array.isArray(data.detail)
+        ? data.detail.map(e => e.msg).join(' · ')
+        : (data.detail || 'Ocurrió un error al registrar el usuario.');
+      errorEl.textContent = msg;
+      errorEl.style.display = '';
+      return;
+    }
+    
+
+    // CA-2: registro exitoso
+    const data = await res.json();
+    successEl.textContent = `Usuario ${escHtml(data.email)} registrado correctamente como ${escHtml(data.nombre_rol)}.`;
+    successEl.style.display = '';
+    document.getElementById('form-alta-usuario').reset();
+
+  } catch (err) {
+    console.error('Error al registrar usuario:', err);
+    errorEl.textContent = 'No se pudo conectar con el servidor. Verificá que el sistema esté disponible.';
+    errorEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Registrar usuario';
+  }
+}
+
+// ─── Auditoria (ADMINISTRADOR) ─────────────────────────────────────────
+
+const _AUDITORIA_PAGE_SIZE = 10;
+let _auditoriaData = [];
+let _auditoriaPage = 0;
+
+function _renderAuditoriaPage() {
+    const tablaBody = document.querySelector('#tabla-auditoria tbody');
+    const pagDiv    = document.getElementById('auditoria-paginacion');
+    const pagInfo   = document.getElementById('auditoria-pag-info');
+    const btnPrev   = document.getElementById('btn-pag-prev');
+    const btnNext   = document.getElementById('btn-pag-next');
+
+    tablaBody.innerHTML = '';
+    const totalPages = Math.ceil(_auditoriaData.length / _AUDITORIA_PAGE_SIZE);
+    const start = _auditoriaPage * _AUDITORIA_PAGE_SIZE;
+    const slice = _auditoriaData.slice(start, start + _AUDITORIA_PAGE_SIZE);
+
+    slice.forEach(item => {
+        const tr = document.createElement('tr');
+        const fechaHora = item.fecha_hora
+            ? new Date(item.fecha_hora).toLocaleString('es-AR')
+            : '';
+        tr.innerHTML = `
+            <td>${escHtml(item.accion || '')}</td>
+            <td>${escHtml(item.usuario_ejecutor_uuid || '')}</td>
+            <td>${escHtml(item.usuario_afectado_uuid || '')}</td>
+            <td>${escHtml(item.estado_inicial || '')}</td>
+            <td>${escHtml(item.estado_final || '')}</td>
+            <td>${escHtml(fechaHora)}</td>
+        `;
+        tablaBody.appendChild(tr);
+    });
+
+    pagDiv.style.display = '';
+    pagInfo.textContent = `Página ${_auditoriaPage + 1} de ${totalPages} · ${_auditoriaData.length} registro${_auditoriaData.length !== 1 ? 's' : ''}`;
+    btnPrev.disabled = _auditoriaPage === 0;
+    btnNext.disabled = _auditoriaPage >= totalPages - 1;
+}
+
+function cambiarPaginaAuditoria(delta) {
+    const totalPages = Math.ceil(_auditoriaData.length / _AUDITORIA_PAGE_SIZE);
+    _auditoriaPage = Math.max(0, Math.min(_auditoriaPage + delta, totalPages - 1));
+    _renderAuditoriaPage();
+}
+
+async function buscarAuditoria() {
+    const afectadoEl = document.getElementById('filtro-afectado');
+    const ejecutorEl = document.getElementById('filtro-ejecutor');
+    const msgEl = document.getElementById('auditoria-mensaje');
+
+    // limpiar estado anterior
+    msgEl.style.display = 'none';
+    msgEl.textContent = '';
+    _auditoriaData = [];
+    _auditoriaPage = 0;
+    document.querySelector('#tabla-auditoria tbody').innerHTML = '';
+    document.getElementById('auditoria-paginacion').style.display = 'none';
+
+    const params = new URLSearchParams();
+    if (afectadoEl.value.trim()) params.append('usuario_afectado_uuid', afectadoEl.value.trim());
+    if (ejecutorEl.value.trim()) params.append('usuario_ejecutor_uuid', ejecutorEl.value.trim());
+
+    try {
+        const res = await fetch(`${API_BASE}/auditoria/eventos?${params.toString()}`, {
+            method: 'GET',
+            headers: { ...authHeaders() }
+        });
+
+        if (await handleApiError(res)) return;
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            msgEl.textContent = data.detail || 'Ocurrió un error al obtener la auditoría.';
+            msgEl.style.display = '';
+            return;
+        }
+
+        const data = await res.json();
+
+        if (!data.length) {
+            msgEl.textContent = 'No se encontraron registros para ese usuario.';
+            msgEl.style.display = '';
+            return;
+        }
+
+        _auditoriaData = data;
+        _renderAuditoriaPage();
+
+    } catch (err) {
+        console.error("Error al buscar auditoría:", err);
+        msgEl.textContent = 'No se pudo conectar con el servidor. Verificá que esté disponible.';
+        msgEl.style.display = '';
+    }
+}
+
+function limpiarFiltrosAuditoria() {
+    document.getElementById('filtro-afectado').value = '';
+    document.getElementById('filtro-ejecutor').value = '';
+}
+
+function cerrarAuditoria() {
+    document.getElementById('auditoria-container').style.display = 'none';
+    _auditoriaData = [];
+    _auditoriaPage = 0;
+    document.querySelector('#tabla-auditoria tbody').innerHTML = '';
+    document.getElementById('auditoria-paginacion').style.display = 'none';
+    document.getElementById('auditoria-mensaje').style.display = 'none';
+}
+
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Inicializar aplicación (verificar sesión)
+  initApp();
+
+  // Eventos del form de login
+  ['login-email', 'login-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => _clearLoginFieldError(id));
+  });
+
+  // Enter en el input de consulta pública
+  const trackInput = document.getElementById('public-track-input');
+  if (trackInput) {
+    trackInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscarPublico();
+    });
+  }
+
+  // Eventos de validación en formulario de alta
   Object.keys(FIELDS).forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => clearFieldError(id));
   });
 
-  let searchTimer;
-  document.getElementById('search-input').addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(
-      () => cargarEnvios(document.getElementById('search-input').value, 1),
-      300
-    );
+  // Limpiar errores del formulario admin al editar campos
+  ['nuevo-email', 'nuevo-password', 'nuevo-rol'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => _clearAdminFieldError(id));
   });
 
-  cargarEnvios();
+  // Búsqueda con debounce
+  const searchEl = document.getElementById('search-input');
+  if (searchEl) {
+    let searchTimer;
+    searchEl.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(
+        () => cargarEnvios(searchEl.value, 1),
+        300
+      );
+    });
+  }
 
+  // Escape para cerrar modales
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      closeConfirmCancelar();
-      closeEstado();
       closeEdit();
       closeConfirmDelete();
       closeDetalle();
     }
   });
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+
+  document.getElementById('modal-alta-usuario').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModalAlta();
+  });
+
+});
+
+  function cerrarModalAlta() {
+    document.getElementById('modal-alta-usuario').style.display = 'none';
+    document.getElementById('form-alta-usuario').reset();
+    document.getElementById('admin-registro-success').style.display = 'none';
+    document.getElementById('admin-registro-error').style.display = 'none';
+  }
+
+function mostrarAuditoria() {
+    document.getElementById("auditoria-container").style.display = "block";
+    buscarAuditoria(); // carga inicial sin filtros (CA-2)
+}
+

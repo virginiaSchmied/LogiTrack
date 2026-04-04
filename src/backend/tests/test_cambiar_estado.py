@@ -65,18 +65,18 @@ _FLUJO_NORMAL = [
 _ESTADOS_UBICACION_OBLIGATORIA = {"EN_DEPOSITO", "EN_SUCURSAL", "ENTREGADO"}
 
 
-def _crear_envio(client) -> str:
-    r = client.post("/envios/", json=PAYLOAD_ENVIO)
+def _crear_envio(client, headers) -> str:
+    r = client.post("/envios/", json=PAYLOAD_ENVIO, headers=headers)
     assert r.status_code == 201
     return r.json()["tracking_id"]
 
 
-def _siguiente_estado(client, tid: str) -> str:
-    estado = client.get(f"/envios/{tid}").json()["estado"]
+def _siguiente_estado(client, tid: str, headers) -> str:
+    estado = client.get(f"/envios/{tid}", headers=headers).json()["estado"]
     return _FLUJO_NORMAL[_FLUJO_NORMAL.index(estado) + 1]
 
 
-def _avanzar_estado(client, tid: str, ubicacion: dict = None) -> dict:
+def _avanzar_estado(client, tid: str, headers, ubicacion: dict = None) -> dict:
     """Avanza el envío al siguiente estado en el flujo normal.
 
     Siempre envía nueva_ubicacion ya que cubre tanto los estados con
@@ -85,31 +85,31 @@ def _avanzar_estado(client, tid: str, ubicacion: dict = None) -> dict:
     """
     ubicacion = ubicacion or UBICACION_VALIDA
     payload = {
-        "nuevo_estado": _siguiente_estado(client, tid),
+        "nuevo_estado": _siguiente_estado(client, tid, headers),
         "reusar_ubicacion_anterior": False,
         "nueva_ubicacion": ubicacion,
     }
-    return client.patch(f"/envios/{tid}/estado", json=payload)
+    return client.patch(f"/envios/{tid}/estado", json=payload, headers=headers)
 
 
-def _avanzar_hasta(client, tid: str, estado_destino: str) -> None:
+def _avanzar_hasta(client, tid: str, estado_destino: str, headers) -> None:
     """Avanza el envío por el flujo normal hasta alcanzar estado_destino."""
     while True:
-        actual = client.get(f"/envios/{tid}").json()["estado"]
+        actual = client.get(f"/envios/{tid}", headers=headers).json()["estado"]
         if actual == estado_destino:
             break
-        r = _avanzar_estado(client, tid)
+        r = _avanzar_estado(client, tid, headers)
         assert r.status_code == 200, f"Falló al avanzar desde {actual}: {r.json()}"
 
 
-def _cancelar_y_eliminar(client, tid: str) -> None:
+def _cancelar_y_eliminar(client, tid: str, headers_supervisor) -> None:
     """Mueve el envío a CANCELADO (desde REGISTRADO es una transición válida) y lo elimina."""
     r = client.patch(f"/envios/{tid}/estado", json={
         "nuevo_estado": "CANCELADO",
         "reusar_ubicacion_anterior": False,
-    })
+    }, headers=headers_supervisor)
     assert r.status_code == 200
-    r = client.delete(f"/envios/{tid}")
+    r = client.delete(f"/envios/{tid}", headers=headers_supervisor)
     assert r.status_code == 200
 
 
@@ -117,30 +117,30 @@ def _cancelar_y_eliminar(client, tid: str) -> None:
 
 class TestCP0030TransicionValida:
 
-    def test_cp0030_retorna_200(self, client):
+    def test_cp0030_retorna_200(self, client, headers_operador):
         """CP-0030 (HP) — PATCH /estado con estado válido y ubicación completa retorna 200."""
-        tid = _crear_envio(client)
-        resp = _avanzar_estado(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        resp = _avanzar_estado(client, tid, headers_operador)
         assert resp.status_code == 200
 
-    def test_cp0030_estado_actualizado_en_bd(self, client, db_session):
+    def test_cp0030_estado_actualizado_en_bd(self, client, db_session, headers_operador):
         """CP-0030 (HP) — El estado queda actualizado en la BD tras la transición."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)  # REGISTRADO → EN_DEPOSITO
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)  # REGISTRADO → EN_DEPOSITO
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_DEPOSITO
 
-    def test_cp0030_respuesta_contiene_nuevo_estado(self, client):
+    def test_cp0030_respuesta_contiene_nuevo_estado(self, client, headers_operador):
         """CP-0030 (HP) — La respuesta refleja el nuevo estado del envío."""
-        tid = _crear_envio(client)
-        data = _avanzar_estado(client, tid).json()  # REGISTRADO → EN_DEPOSITO
+        tid = _crear_envio(client, headers_operador)
+        data = _avanzar_estado(client, tid, headers_operador).json()  # REGISTRADO → EN_DEPOSITO
         assert data["estado"] == "EN_DEPOSITO"
 
-    def test_cp0030_flujo_completo_hasta_entregado(self, client, db_session):
+    def test_cp0030_flujo_completo_hasta_entregado(self, client, db_session, headers_operador):
         """CP-0030 (HP) — Se puede avanzar por todos los estados hasta ENTREGADO."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         for estado_esperado in ["EN_DEPOSITO", "EN_TRANSITO", "EN_SUCURSAL", "EN_DISTRIBUCION", "ENTREGADO"]:
-            resp = _avanzar_estado(client, tid)
+            resp = _avanzar_estado(client, tid, headers_operador)
             assert resp.status_code == 200
             assert resp.json()["estado"] == estado_esperado
 
@@ -149,39 +149,43 @@ class TestCP0030TransicionValida:
 
 class TestCP0031UbicacionVacia:
 
-    def _payload_con_ubicacion(self, tid, client, override: dict) -> dict:
+    def _payload_con_ubicacion(self, tid, client, headers, override: dict) -> dict:
         return {
-            "nuevo_estado": _siguiente_estado(client, tid),
+            "nuevo_estado": _siguiente_estado(client, tid, headers),
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": {**UBICACION_VALIDA, **override},
         }
 
-    def test_cp0031_calle_vacia_retorna_422(self, client):
+    def test_cp0031_calle_vacia_retorna_422(self, client, headers_operador):
         """CP-0031 (UP) — Calle vacía en ubicación retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"calle": ""}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"calle": ""}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0031_ciudad_vacia_retorna_422(self, client):
+    def test_cp0031_ciudad_vacia_retorna_422(self, client, headers_operador):
         """CP-0031 (UP) — Ciudad vacía en ubicación retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"ciudad": ""}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"ciudad": ""}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0031_numero_vacio_retorna_422(self, client):
+    def test_cp0031_numero_vacio_retorna_422(self, client, headers_operador):
         """CP-0031 (UP) — Número vacío en ubicación retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"numero": ""}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"numero": ""}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0031_estado_no_cambia_si_validacion_falla(self, client, db_session):
+    def test_cp0031_estado_no_cambia_si_validacion_falla(self, client, db_session, headers_operador):
         """CP-0031 (UP) — Si la validación falla, el estado del envío no se modifica."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         client.patch(f"/envios/{tid}/estado",
-                     json=self._payload_con_ubicacion(tid, client, {"calle": ""}))
+                     json=self._payload_con_ubicacion(tid, client, headers_operador, {"calle": ""}),
+                     headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.REGISTRADO
 
@@ -190,32 +194,35 @@ class TestCP0031UbicacionVacia:
 
 class TestCP0032UbicacionSoloEspacios:
 
-    def _payload_con_ubicacion(self, tid, client, override: dict) -> dict:
+    def _payload_con_ubicacion(self, tid, client, headers, override: dict) -> dict:
         return {
-            "nuevo_estado": _siguiente_estado(client, tid),
+            "nuevo_estado": _siguiente_estado(client, tid, headers),
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": {**UBICACION_VALIDA, **override},
         }
 
-    def test_cp0032_calle_espacios_retorna_422(self, client):
+    def test_cp0032_calle_espacios_retorna_422(self, client, headers_operador):
         """CP-0032 (EC) — Calle con solo espacios es tratada como vacía y retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"calle": "   "}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"calle": "   "}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0032_ciudad_espacios_retorna_422(self, client):
+    def test_cp0032_ciudad_espacios_retorna_422(self, client, headers_operador):
         """CP-0032 (EC) — Ciudad con solo espacios es tratada como vacía y retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"ciudad": "   "}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"ciudad": "   "}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0032_numero_espacios_retorna_422(self, client):
+    def test_cp0032_numero_espacios_retorna_422(self, client, headers_operador):
         """CP-0032 (EC) — Número con solo espacios es tratado como vacío y retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado",
-                            json=self._payload_con_ubicacion(tid, client, {"numero": "   "}))
+                            json=self._payload_con_ubicacion(tid, client, headers_operador, {"numero": "   "}),
+                            headers=headers_operador)
         assert resp.status_code == 422
 
 
@@ -223,50 +230,50 @@ class TestCP0032UbicacionSoloEspacios:
 
 class TestCP0033NoSaltarEstados:
 
-    def test_cp0033_retroceder_un_paso_retorna_422(self, client):
+    def test_cp0033_retroceder_un_paso_retorna_422(self, client, headers_operador):
         """CP-0033 (UP) — Intentar retroceder un estado retorna 422."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)  # REGISTRADO → EN_DEPOSITO
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)  # REGISTRADO → EN_DEPOSITO
         payload = {
             "nuevo_estado": "REGISTRADO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
         }
-        resp = client.patch(f"/envios/{tid}/estado", json=payload)
+        resp = client.patch(f"/envios/{tid}/estado", json=payload, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0033_mismo_estado_retorna_422(self, client):
+    def test_cp0033_mismo_estado_retorna_422(self, client, headers_operador):
         """CP-0033 (UP) — Intentar quedarse en el mismo estado retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         payload = {
             "nuevo_estado": "REGISTRADO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
         }
-        resp = client.patch(f"/envios/{tid}/estado", json=payload)
+        resp = client.patch(f"/envios/{tid}/estado", json=payload, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0033_saltar_estado_retorna_422(self, client):
+    def test_cp0033_saltar_estado_retorna_422(self, client, headers_operador):
         """CP-0033 (UP) — Intentar saltar más de un estado adelante retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         # REGISTRADO → EN_SUCURSAL no es una transición válida (debe pasar por EN_DEPOSITO)
         payload = {
             "nuevo_estado": "EN_SUCURSAL",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
         }
-        resp = client.patch(f"/envios/{tid}/estado", json=payload)
+        resp = client.patch(f"/envios/{tid}/estado", json=payload, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0033_estado_no_cambia_al_intentar_retroceder(self, client, db_session):
+    def test_cp0033_estado_no_cambia_al_intentar_retroceder(self, client, db_session, headers_operador):
         """CP-0033 (UP) — El estado en BD no cambia al intentar retroceder."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)  # REGISTRADO → EN_DEPOSITO
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)  # REGISTRADO → EN_DEPOSITO
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "REGISTRADO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_DEPOSITO
 
@@ -275,27 +282,31 @@ class TestCP0033NoSaltarEstados:
 
 class TestCP0036EnvioEliminado:
 
-    def test_cp0036_cambio_estado_en_envio_eliminado_retorna_409(self, client):
+    def test_cp0036_cambio_estado_en_envio_eliminado_retorna_409(
+        self, client, headers_operador, headers_supervisor
+    ):
         """CP-0036 (EC) — PATCH /estado sobre un envío ELIMINADO retorna 409."""
-        tid = _crear_envio(client)
-        _cancelar_y_eliminar(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        _cancelar_y_eliminar(client, tid, headers_supervisor)
         payload = {
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
         }
-        resp = client.patch(f"/envios/{tid}/estado", json=payload)
+        resp = client.patch(f"/envios/{tid}/estado", json=payload, headers=headers_operador)
         assert resp.status_code == 409
 
-    def test_cp0036_estado_permanece_eliminado(self, client, db_session):
+    def test_cp0036_estado_permanece_eliminado(
+        self, client, db_session, headers_operador, headers_supervisor
+    ):
         """CP-0036 (EC) — Tras el intento fallido, el estado sigue siendo ELIMINADO."""
-        tid = _crear_envio(client)
-        _cancelar_y_eliminar(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        _cancelar_y_eliminar(client, tid, headers_supervisor)
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.ELIMINADO
 
@@ -304,10 +315,10 @@ class TestCP0036EnvioEliminado:
 
 class TestCP0037Auditoria:
 
-    def test_cp0037_se_crea_evento_cambio_estado(self, client, db_session):
+    def test_cp0037_se_crea_evento_cambio_estado(self, client, db_session, headers_operador):
         """CP-0037 (HP) — Un cambio de estado exitoso crea un EventoDeEnvio de CAMBIO_ESTADO."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = (db_session.query(EventoDeEnvio)
                   .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -315,10 +326,10 @@ class TestCP0037Auditoria:
                   .first())
         assert evento is not None
 
-    def test_cp0037_evento_registra_estado_inicial_y_final(self, client, db_session):
+    def test_cp0037_evento_registra_estado_inicial_y_final(self, client, db_session, headers_operador):
         """CP-0037 (HP) — El EventoDeEnvio registra correctamente el estado anterior y el nuevo."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)  # REGISTRADO → EN_DEPOSITO
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)  # REGISTRADO → EN_DEPOSITO
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = (db_session.query(EventoDeEnvio)
                   .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -327,10 +338,10 @@ class TestCP0037Auditoria:
         assert evento.estado_inicial == EstadoEnvioEnum.REGISTRADO
         assert evento.estado_final   == EstadoEnvioEnum.EN_DEPOSITO
 
-    def test_cp0037_evento_registra_ubicacion(self, client, db_session):
+    def test_cp0037_evento_registra_ubicacion(self, client, db_session, headers_operador):
         """CP-0037 (HP) — El EventoDeEnvio tiene una ubicacion_actual_id no nula."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = (db_session.query(EventoDeEnvio)
                   .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -338,10 +349,10 @@ class TestCP0037Auditoria:
                   .first())
         assert evento.ubicacion_actual_id is not None
 
-    def test_cp0037_evento_registra_fecha_hora(self, client, db_session):
+    def test_cp0037_evento_registra_fecha_hora(self, client, db_session, headers_operador):
         """CP-0037 (HP) — El EventoDeEnvio tiene fecha_hora registrada."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = (db_session.query(EventoDeEnvio)
                   .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -349,11 +360,13 @@ class TestCP0037Auditoria:
                   .first())
         assert evento.fecha_hora is not None
 
-    def test_cp0037_multiples_cambios_generan_multiples_eventos(self, client, db_session):
+    def test_cp0037_multiples_cambios_generan_multiples_eventos(
+        self, client, db_session, headers_operador
+    ):
         """CP-0037 (HP) — Cada transición genera su propio evento de auditoría."""
-        tid = _crear_envio(client)
-        _avanzar_estado(client, tid)  # → EN_DEPOSITO
-        _avanzar_estado(client, tid)  # → EN_TRANSITO
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_estado(client, tid, headers_operador)  # → EN_DEPOSITO
+        _avanzar_estado(client, tid, headers_operador)  # → EN_TRANSITO
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         eventos = (db_session.query(EventoDeEnvio)
                    .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -366,30 +379,30 @@ class TestCP0037Auditoria:
 
 class TestCP0317ReusoUbicacion:
 
-    def test_cp0317_reusar_en_estado_no_obligatorio_retorna_200(self, client):
+    def test_cp0317_reusar_en_estado_no_obligatorio_retorna_200(self, client, headers_operador):
         """CP-0317 (HP) — reusar_ubicacion_anterior=true en EN_TRANSITO retorna 200."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_DEPOSITO")  # establece ubicación anterior
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_DEPOSITO", headers_operador)  # establece ubicación anterior
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 200
 
-    def test_cp0317_estado_se_actualiza_al_reusar(self, client, db_session):
+    def test_cp0317_estado_se_actualiza_al_reusar(self, client, db_session, headers_operador):
         """CP-0317 (HP) — El estado queda en EN_TRANSITO tras reusar ubicación."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_DEPOSITO")
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_DEPOSITO", headers_operador)
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_TRANSITO
 
-    def test_cp0317_reusar_sin_ubicacion_previa_retorna_422(self, client):
+    def test_cp0317_reusar_sin_ubicacion_previa_retorna_422(self, client, headers_operador):
         """CP-0317 (UP) — reusar_ubicacion_anterior=true sin ubicación previa retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         # REGISTRADO no tiene ubicación previa; EN_DEPOSITO es el siguiente válido pero es obligatorio
         # Usamos EN_DISTRIBUCION desde EN_TRANSITO como caso, pero para testear sin previa
         # avanzamos solo al primer estado no-obligatorio: EN_TRANSITO necesita pasar por EN_DEPOSITO
@@ -399,7 +412,7 @@ class TestCP0317ReusoUbicacion:
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
 
@@ -407,24 +420,24 @@ class TestCP0317ReusoUbicacion:
 
 class TestCP0318UbicacionObligatoriaConNueva:
 
-    def test_cp0318_en_deposito_con_nueva_ubicacion_retorna_200(self, client):
+    def test_cp0318_en_deposito_con_nueva_ubicacion_retorna_200(self, client, headers_operador):
         """CP-0318 (HP) — Transición a EN_DEPOSITO con nueva_ubicacion retorna 200."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 200
 
-    def test_cp0318_ubicacion_queda_registrada(self, client, db_session):
+    def test_cp0318_ubicacion_queda_registrada(self, client, db_session, headers_operador):
         """CP-0318 (HP) — La ubicación nueva queda asociada al evento de auditoría."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento = (db_session.query(EventoDeEnvio)
                   .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -437,33 +450,33 @@ class TestCP0318UbicacionObligatoriaConNueva:
 
 class TestCP0319UbicacionObligatoriaFaltante:
 
-    def test_cp0319_en_deposito_sin_ubicacion_retorna_422(self, client):
+    def test_cp0319_en_deposito_sin_ubicacion_retorna_422(self, client, headers_operador):
         """CP-0319 (UP) — Transición a EN_DEPOSITO sin nueva_ubicacion retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0319_estado_no_cambia(self, client, db_session):
+    def test_cp0319_estado_no_cambia(self, client, db_session, headers_operador):
         """CP-0319 (UP) — El estado permanece REGISTRADO cuando falta la ubicación obligatoria."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": False,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.REGISTRADO
 
-    def test_cp0319_en_sucursal_sin_ubicacion_retorna_422(self, client):
+    def test_cp0319_en_sucursal_sin_ubicacion_retorna_422(self, client, headers_operador):
         """CP-0319 (UP) — Transición a EN_SUCURSAL sin nueva_ubicacion retorna 422."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_TRANSITO")
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_SUCURSAL",
             "reusar_ubicacion_anterior": False,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
 
@@ -471,33 +484,33 @@ class TestCP0319UbicacionObligatoriaFaltante:
 
 class TestCP0320UbicacionObligatoriaConReusar:
 
-    def test_cp0320_en_deposito_con_reusar_true_retorna_422(self, client):
+    def test_cp0320_en_deposito_con_reusar_true_retorna_422(self, client, headers_operador):
         """CP-0320 (UP) — Transición a EN_DEPOSITO con reusar_ubicacion_anterior=true retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_DEPOSITO",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0320_en_sucursal_con_reusar_true_retorna_422(self, client):
+    def test_cp0320_en_sucursal_con_reusar_true_retorna_422(self, client, headers_operador):
         """CP-0320 (UP) — Transición a EN_SUCURSAL con reusar_ubicacion_anterior=true retorna 422."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_TRANSITO")
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_SUCURSAL",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0320_entregado_con_reusar_true_retorna_422(self, client):
+    def test_cp0320_entregado_con_reusar_true_retorna_422(self, client, headers_operador):
         """CP-0320 (UP) — Transición a ENTREGADO con reusar_ubicacion_anterior=true retorna 422."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_DISTRIBUCION")
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_DISTRIBUCION", headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "ENTREGADO",
             "reusar_ubicacion_anterior": True,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
 
@@ -505,34 +518,34 @@ class TestCP0320UbicacionObligatoriaConReusar:
 
 class TestCP0321SaltarEstado:
 
-    def test_cp0321_registrado_a_en_transito_retorna_422(self, client):
+    def test_cp0321_registrado_a_en_transito_retorna_422(self, client, headers_operador):
         """CP-0321 (UP) — REGISTRADO → EN_TRANSITO no es una transición válida, retorna 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
 
-    def test_cp0321_estado_no_cambia_al_saltar(self, client, db_session):
+    def test_cp0321_estado_no_cambia_al_saltar(self, client, db_session, headers_operador):
         """CP-0321 (UP) — El estado permanece REGISTRADO al intentar saltar a EN_TRANSITO."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.REGISTRADO
 
-    def test_cp0321_en_deposito_a_en_sucursal_retorna_422(self, client):
+    def test_cp0321_en_deposito_a_en_sucursal_retorna_422(self, client, headers_operador):
         """CP-0321 (UP) — EN_DEPOSITO → EN_SUCURSAL no es una transición válida, retorna 422."""
-        tid = _crear_envio(client)
-        _avanzar_hasta(client, tid, "EN_DEPOSITO")
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_DEPOSITO", headers_operador)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_SUCURSAL",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        })
+        }, headers=headers_operador)
         assert resp.status_code == 422
