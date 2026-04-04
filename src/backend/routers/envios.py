@@ -215,11 +215,18 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
     ni calle, número o código postal de ninguna dirección.
     No requiere autenticación. CA-2, CA-3, CA-4, CA-5.
     """
-    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    envio = (
+    db.query(Envio)
+    .filter(
+        Envio.tracking_id == tracking_id,
+        Envio.estado != "ELIMINADO"
+    )
+    .first()
+)
     if not envio:
         raise HTTPException(
             status_code=404,
-            detail=f"No se encontró ningún envío con el tracking ID {tracking_id}",
+            detail=f"No se encontró ningún envío con el tracking ID especificado.",
         )
     return EnvioPublicoOut(
         tracking_id=envio.tracking_id,
@@ -479,10 +486,15 @@ def cambiar_estado(
             detail=f"Transición inválida: {envio.estado.value} → {payload.nuevo_estado.value}"
         )
 
-    if payload.nuevo_estado in ESTADOS_SOLO_SUPERVISOR and current_user.rol.nombre != "SUPERVISOR":
+    ESTADOS_EXCEPCION_REVERSIBLES = [EstadoEnvioEnum.RETRASADO, EstadoEnvioEnum.BLOQUEADO]
+
+    es_destino_restringido = payload.nuevo_estado in ESTADOS_SOLO_SUPERVISOR
+    es_reversion_excepcion = envio.estado in ESTADOS_EXCEPCION_REVERSIBLES
+
+    if (es_destino_restringido or es_reversion_excepcion) and current_user.rol.nombre != "SUPERVISOR":
         raise HTTPException(
             status_code=403,
-            detail="Acceso denegado: solo el Supervisor puede asignar excepciones o cancelar envíos",
+            detail="Acceso denegado: solo el Supervisor puede gestionar estados de excepción",
         )
 
     # CANCELADO no requiere ubicación

@@ -1,7 +1,8 @@
 'use strict';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://18.191.173.105:8000";
+const API_BASE = "http://localhost:8000"; 
+//"http://18.191.173.105:8000";
 
 // ─── Estado de autenticación ──────────────────────────────────────────────────
 let _token    = null;
@@ -288,7 +289,7 @@ async function buscarPublico() {
   try {
     const res = await fetch(`${API_BASE}/envios/publico/${encodeURIComponent(trackingId)}`);
     if (res.status === 404) {
-      resultEl.innerHTML = `<p class="track-error">No se encontró ningún envío con el tracking ID <strong>${escHtml(trackingId)}</strong>. Verificá el código e intentá nuevamente.</p>`;
+      resultEl.innerHTML = `<p class="track-error">No se encontró ningún envío con el tracking ID ${escHtml(trackingId)}. Verificá el código e intentá nuevamente.</p>`;
       return;
     }
     if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -608,11 +609,21 @@ async function openDetalle(trackingId) {
     const btnEditar        = document.getElementById('btn-editar');
     const btnCambiarEstado = document.getElementById('btn-cambiar-estado');
     const btnMovimiento    = document.getElementById('btn-movimiento');
-
+    const btnAuditoria = document.getElementById('btn-auditoria');
     // Editar
     if (e.estado !== 'ELIMINADO' && e.estado !== 'CANCELADO') {
       btnEditar.style.display = '';
       btnEditar.onclick = () => { closeDetalle(); openEdit(e.tracking_id, e); };
+    }
+
+    if (_userRole === 'SUPERVISOR'){
+      btnAuditoria.style.display = '';
+      btnEliminar.onclick = () =>
+        openAuditoria();
+    }
+
+    if (_userRole === 'OPERADOR'){
+      btnAuditoria.style.display = 'none';
     }
 
     // Eliminar (solo SUPERVISOR y cancelado)
@@ -623,21 +634,31 @@ async function openDetalle(trackingId) {
     }
 
     // Cambiar estado
-    const transiciones = TRANSICIONES_VALIDAS[e.estado] || [];
-    if (transiciones.length > 0) {
-      btnCambiarEstado.style.display = '';
-      btnCambiarEstado.onclick = () => {
-        closeDetalle();
-        openEstado(
-          e.tracking_id,
-          e.estado,
-          e.ultima_ubicacion || null,
-          e.estado_revertir || null
-        );
-      };
-    }
+const ESTADOS_EXCEPCION = ['RETRASADO', 'BLOQUEADO'];
+const msgExcepcion      = document.getElementById('msg-excepcion');
+const transiciones      = TRANSICIONES_VALIDAS[e.estado] || [];
 
-    // Movimiento
+msgExcepcion.style.display = 'none'; // reset en cada apertura
+
+if (transiciones.length > 0) {
+  if (ESTADOS_EXCEPCION.includes(e.estado) && _userRole === 'OPERADOR') {
+    msgExcepcion.style.display = '';       // mostrar mensaje
+    btnCambiarEstado.style.display = 'none'; // ocultar botón
+  } else {
+    btnCambiarEstado.style.display = '';
+    btnCambiarEstado.onclick = () => {
+      closeDetalle();
+      openEstado(
+        e.tracking_id,
+        e.estado,
+        e.ultima_ubicacion || null,
+        e.estado_revertir || null
+      );
+    };
+  }
+}
+
+// Movimiento
     if (!['ELIMINADO', 'ENTREGADO', 'CANCELADO'].includes(e.estado)) {
       btnMovimiento.style.display = '';
       btnMovimiento.onclick = () => {
@@ -716,6 +737,7 @@ function closeDetalle() {
   document.getElementById('btn-editar').style.display          = 'none';
   document.getElementById('btn-cambiar-estado').style.display  = 'none';
   document.getElementById('btn-movimiento').style.display      = 'none';
+  document.getElementById('msg-excepcion').style.display       = 'none'; 
   document.body.style.overflow = '';
   _envioDetalle = null;
 }
