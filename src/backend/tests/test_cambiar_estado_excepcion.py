@@ -20,13 +20,13 @@ Cubre:
     CP-0327  CA-9  Fallo de validación no genera evento de auditoría                  (Unhappy Path)
     CP-0328  CA-10 DELETE en envío CANCELADO retorna 200                              (Happy Path)
     CP-0329  CA-10 DELETE en envío no CANCELADO retorna 422                           (Unhappy Path)
+    CP-0062  CA-1  Administrador no puede asignar estado de excepción → 403            (Unhappy Path)
+    CP-0063  CA-1  Sin token → 401 al asignar estado de excepción                      (Edge Case)
+    CP-0070  CA-5  Sin token → 401 al revertir estado de excepción                     (Edge Case)
 
 Tests NO implementados (requieren autenticación JWT):
   CP-0061  CA-1  — requiere JWT con rol = Supervisor
-  CP-0062  CA-1  — requiere JWT con rol = Operador → 403
-  CP-0063  CA-1  — requiere request sin Authorization → 401
   CP-0069  CA-5  — requiere JWT con rol = Operador → 403
-  CP-0070  CA-5  — requiere request sin Authorization → 401
 """
 from datetime import date, timedelta
 
@@ -744,3 +744,46 @@ class TestCP0329DeleteNoCancelado:
         client.delete(f"/envios/{tid}", headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.REGISTRADO
+
+
+# ── CP-0062 / CP-0063 / CP-0070 — control de acceso ─────────────────────────
+
+class TestCP0062CP0063CP0070ControlAccesoExcepcion:
+
+    def test_cp0062_admin_no_puede_asignar_excepcion_retorna_403(self, client, headers_operador, headers_admin):
+        """CP-0062 (UP) — CA-1: JWT con rol Administrador recibe 403 al asignar estado de excepción."""
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
+        resp = client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "RETRASADO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        }, headers=headers_admin)
+        assert resp.status_code == 403
+
+    def test_cp0063_sin_token_retorna_401_al_asignar_excepcion(self, client, headers_operador):
+        """CP-0063 (EC) — CA-1: Request sin header Authorization retorna 401 al asignar estado de excepción."""
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
+        resp = client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "RETRASADO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        })
+        assert resp.status_code == 401
+
+    def test_cp0070_sin_token_retorna_401_al_revertir_excepcion(self, client, headers_operador, headers_supervisor):
+        """CP-0070 (EC) — CA-5: Request sin header Authorization retorna 401 al revertir estado de excepción."""
+        tid = _crear_envio(client, headers_operador)
+        _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
+        client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "RETRASADO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        }, headers=headers_supervisor)
+        resp = client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "EN_TRANSITO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        })
+        assert resp.status_code == 401
