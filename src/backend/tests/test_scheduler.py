@@ -64,31 +64,38 @@ def patch_db(client):
         yield
 
 
-@pytest.fixture(scope='class')
-def running_scheduler():
-    """Inicia el scheduler para que get_job() pueda acceder a los jobs registrados."""
-    scheduler.start()
-    yield scheduler
-    scheduler.shutdown(wait=False)
+def _get_job(job_id: str):
+    """Busca un job en jobstores (scheduler iniciado) o en pending_jobs (no iniciado).
+
+    En APScheduler 3.11+, add_job() antes de start() deja los jobs en _pending_jobs;
+    get_job() solo consulta los jobstores, por lo que devuelve None si el scheduler
+    no fue iniciado todavía. Este helper cubre ambos casos sin efectos secundarios.
+    """
+    job = scheduler.get_job(job_id)
+    if job is not None:
+        return job
+    for pending_job, _, _ in scheduler._pending_jobs:
+        if pending_job.id == job_id:
+            return pending_job
+    return None
 
 
 # ── CP-0331 — CA-1: configuración del job ────────────────────────────────────
 
 class TestCP0331ConfiguracionJob:
 
-    def test_cp0331_job_existe_en_el_scheduler(self, running_scheduler):
+    def test_cp0331_job_existe_en_el_scheduler(self):
         """CP-0331 (HP) — CA-1: El job 'recalcular_prioridades' está registrado en el scheduler."""
-        job = running_scheduler.get_job('recalcular_prioridades')
-        assert job is not None
+        assert _get_job('recalcular_prioridades') is not None
 
-    def test_cp0331_job_trigger_es_cron(self, running_scheduler):
+    def test_cp0331_job_trigger_es_cron(self):
         """CP-0331 (HP) — CA-1: El job usa trigger de tipo cron."""
-        job = running_scheduler.get_job('recalcular_prioridades')
+        job = _get_job('recalcular_prioridades')
         assert job.trigger.__class__.__name__ == 'CronTrigger'
 
-    def test_cp0331_job_corre_a_medianoche(self, running_scheduler):
+    def test_cp0331_job_corre_a_medianoche(self):
         """CP-0331 (HP) — CA-1: El cron está configurado en hour=0, minute=0."""
-        job = running_scheduler.get_job('recalcular_prioridades')
+        job = _get_job('recalcular_prioridades')
         fields = {f.name: str(f) for f in job.trigger.fields}
         assert fields['hour'] == '0'
         assert fields['minute'] == '0'
