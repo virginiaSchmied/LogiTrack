@@ -14,6 +14,7 @@ from schemas import (
     EventoHistorialOut, EventoAuditoriaOut, MovimientoCreate, EnvioPublicoOut
 )
 
+
 from ml_predictor import predecir_prioridad
 from auth import require_operador_supervisor, require_supervisor
 logger = logging.getLogger(__name__)
