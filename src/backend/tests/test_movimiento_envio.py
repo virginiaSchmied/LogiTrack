@@ -80,7 +80,7 @@ class TestCP0292RegistroExitoso:
         tid = _crear_envio(client, headers_operador)
         _registrar_movimiento(client, tid, UBICACION_1)
 
-        historial = client.get(f"/envios/{tid}/historial").json()
+        historial = client.get(f"/envios/{tid}/historial", headers=headers_operador).json()
         tipos = [e["accion"] for e in historial]
         assert "MOVIMIENTO" in tipos
 
@@ -117,7 +117,7 @@ class TestCP0297MultiplesMovimientos:
         _registrar_movimiento(client, tid, UBICACION_1)
         _registrar_movimiento(client, tid, UBICACION_2)
 
-        historial = client.get(f"/envios/{tid}/historial").json()
+        historial = client.get(f"/envios/{tid}/historial", headers=headers_operador).json()
         movimientos = [e for e in historial if e["accion"] == "MOVIMIENTO"]
         assert len(movimientos) == 2
 
@@ -127,7 +127,7 @@ class TestCP0297MultiplesMovimientos:
         _registrar_movimiento(client, tid, UBICACION_1)
         _registrar_movimiento(client, tid, UBICACION_2)
 
-        historial = client.get(f"/envios/{tid}/historial").json()
+        historial = client.get(f"/envios/{tid}/historial", headers=headers_operador).json()
         movimientos = [e for e in historial if e["accion"] == "MOVIMIENTO"]
         assert movimientos[0]["ubicacion"]["ciudad"] == UBICACION_1["ciudad"]
         assert movimientos[1]["ubicacion"]["ciudad"] == UBICACION_2["ciudad"]
