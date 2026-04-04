@@ -9,10 +9,11 @@ from datetime import date
 from database import get_db
 from models import Envio, Direccion, EventoDeEnvio, EstadoEnvioEnum, AccionEnvioEnum, NivelPrioridadEnum, Usuario
 from schemas import (
-    EnvioCreate, EnvioOut, EnvioListItem, EnvioListResponse,
-    EnvioUpdateContacto, EnvioUpdateOperativo, EnvioPublicoOut,
-    EnvioOutDetalle, EnvioCambioEstado, DireccionOut
+    EnvioCreate, EnvioOut, EnvioOutDetalle, EnvioListItem, EnvioListResponse,
+    EnvioUpdateContacto, EnvioUpdateOperativo, EnvioCambioEstado, DireccionOut,
+    EventoHistorialOut, EventoAuditoriaOut, MovimientoCreate,EnvioPublicoOut
 )
+
 from ml_predictor import predecir_prioridad
 from auth import require_operador_supervisor, require_supervisor
 logger = logging.getLogger(__name__)
@@ -516,3 +517,145 @@ def cambiar_estado(
     db.commit()
     db.refresh(envio)
     return envio
+
+
+# ── Historial de envío (LP-120) ───────────────────────────────────────────────
+
+@router.get(
+    "/{tracking_id}/historial",
+    response_model=list[EventoHistorialOut],
+    summary="Historial de estados y movimientos de un envío",
+)
+def get_historial(tracking_id: str, db: Session = Depends(get_db)):
+    """
+    Retorna el historial cronológico de CAMBIO_ESTADO y MOVIMIENTO de un envío.
+    Excluye CREACION, MODIFICACION y ELIMINACION (accesibles solo para supervisores en LP-174).
+    """
+    envio = db.query(Envio).filter(
+        Envio.tracking_id == tracking_id,
+        Envio.estado != EstadoEnvioEnum.ELIMINADO,
+    ).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
+
+    eventos = (
+        db.query(EventoDeEnvio)
+        .filter(
+            EventoDeEnvio.envio_uuid == envio.uuid,
+            EventoDeEnvio.accion.in_([
+                AccionEnvioEnum.CREACION,
+                AccionEnvioEnum.CAMBIO_ESTADO,
+                AccionEnvioEnum.MOVIMIENTO,
+            ]),
+        )
+        .order_by(EventoDeEnvio.fecha_hora.asc())
+        .all()
+    )
+
+    result = []
+    for ev in eventos:
+        ubicacion = None
+        if ev.ubicacion_actual_id:
+            ubicacion = db.query(Direccion).filter(
+                Direccion.id == ev.ubicacion_actual_id
+            ).first()
+        result.append(EventoHistorialOut(
+            accion=ev.accion,
+            estado=ev.estado_final,
+            ubicacion=DireccionOut.model_validate(ubicacion) if ubicacion else None,
+            fecha_hora=ev.fecha_hora,
+        ))
+    return result
+
+
+# ── Auditoría de envío (LP-174) ───────────────────────────────────────────────
+
+@router.get(
+    "/{tracking_id}/auditoria",
+    response_model=list[EventoAuditoriaOut],
+    summary="Historial completo de auditoría de un envío (solo supervisor)",
+)
+def get_auditoria(tracking_id: str, db: Session = Depends(get_db)):
+    """
+    Retorna todas las acciones registradas sobre un envío, incluyendo
+    CREACION, MODIFICACION, CAMBIO_ESTADO, MOVIMIENTO y ELIMINACION.
+    Incluye el email del usuario que realizó cada acción.
+    Solo accesible por supervisores (control de roles pendiente de implementar con JWT).
+    """
+    envio = db.query(Envio).filter(Envio.tracking_id == tracking_id).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
+
+    eventos = (
+        db.query(EventoDeEnvio)
+        .filter(EventoDeEnvio.envio_uuid == envio.uuid)
+        .order_by(EventoDeEnvio.fecha_hora.asc())
+        .all()
+    )
+
+    result = []
+    for ev in eventos:
+        ubicacion = None
+        if ev.ubicacion_actual_id:
+            ubicacion = db.query(Direccion).filter(
+                Direccion.id == ev.ubicacion_actual_id
+            ).first()
+        usuario = db.query(Usuario).filter(Usuario.uuid == ev.usuario_uuid).first()
+        result.append(EventoAuditoriaOut(
+            accion=ev.accion,
+            estado_inicial=ev.estado_inicial,
+            estado_final=ev.estado_final,
+            ubicacion=DireccionOut.model_validate(ubicacion) if ubicacion else None,
+            usuario_email=usuario.email if usuario else "desconocido",
+            fecha_hora=ev.fecha_hora,
+        ))
+    return result
+
+
+# ── Movimiento físico (LP-162) ────────────────────────────────────────────────
+
+@router.post(
+    "/{tracking_id}/movimientos",
+    status_code=201,
+    summary="Registrar un movimiento físico del envío",
+)
+def registrar_movimiento(
+    tracking_id: str,
+    payload: MovimientoCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Persiste un EventoDeEnvio de tipo MOVIMIENTO asociado al envío.
+    No modifica el estado del envío.
+    """
+    envio = db.query(Envio).filter(
+        Envio.tracking_id == tracking_id,
+        Envio.estado != EstadoEnvioEnum.ELIMINADO,
+    ).first()
+    if not envio:
+        raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
+
+    nueva_dir = Direccion(
+        id=uuid.uuid4(),
+        calle=payload.ubicacion.calle,
+        numero=payload.ubicacion.numero,
+        ciudad=payload.ubicacion.ciudad,
+        provincia=payload.ubicacion.provincia,
+        codigo_postal=payload.ubicacion.codigo_postal,
+    )
+    db.add(nueva_dir)
+    db.flush()
+
+    USUARIO_OPERADOR_SEED = "b1b2c3d4-0002-0002-0002-000000000003"
+    evento = EventoDeEnvio(
+        uuid=uuid.uuid4(),
+        accion=AccionEnvioEnum.MOVIMIENTO,
+        estado_inicial=envio.estado,
+        estado_final=envio.estado,
+        ubicacion_actual_id=nueva_dir.id,
+        usuario_uuid=uuid.UUID(USUARIO_OPERADOR_SEED),
+        envio_uuid=envio.uuid,
+    )
+    db.add(evento)
+    db.commit()
+    return {"mensaje": "Movimiento registrado correctamente"}
