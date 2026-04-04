@@ -116,6 +116,7 @@ class TestCA1OperadorNoEjecutaAccionesDeSupervisor:
     ):
         """CA-1 (complementario) — Supervisor puede eliminar un envío → 200."""
         tid = _crear_envio(client, headers_operador)
+        client.patch(f"/envios/{tid}/estado", json={"nuevo_estado": "CANCELADO"}, headers=headers_supervisor)
         assert client.delete(f"/envios/{tid}", headers=headers_supervisor).status_code == 200
 
     def test_supervisor_si_puede_asignar_estado_retrasado(
