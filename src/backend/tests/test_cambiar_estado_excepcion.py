@@ -26,7 +26,7 @@ Cubre:
 
 Tests NO implementados (requieren autenticación JWT):
   CP-0061  CA-1  — requiere JWT con rol = Supervisor
-  CP-0069  CA-5  — requiere JWT con rol = Operador → 403
+  CP-0069  CA-5  — requiere JWT con rol = Operador → 403 al revertir excepción
 """
 from datetime import date, timedelta
 
@@ -299,7 +299,7 @@ class TestCP0071ReversionHP:
     def test_cp0071_reversion_retrasado_retorna_200(
         self, client, headers_operador, headers_supervisor
     ):
-        """CP-0071 (HP) — Revertir RETRASADO con nueva ubicación completa retorna 200."""
+        """CP-0071 (HP) — Supervisor revierte RETRASADO con nueva ubicación completa → 200."""
         tid = _crear_envio(client, headers_operador)
         _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
         _asignar_excepcion(client, tid, "RETRASADO", headers_supervisor)
@@ -307,7 +307,7 @@ class TestCP0071ReversionHP:
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 200
 
     def test_cp0071_estado_vuelve_al_flujo_normal(
@@ -321,7 +321,7 @@ class TestCP0071ReversionHP:
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_TRANSITO
 
@@ -340,7 +340,7 @@ class TestCP0072ReversionSinUbicacion:
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 422
 
     def test_cp0072_calle_vacia_retorna_422(
@@ -354,7 +354,7 @@ class TestCP0072ReversionSinUbicacion:
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": {**UBICACION_VALIDA, "calle": ""},
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 422
 
     def test_cp0072_estado_permanece_en_excepcion(
@@ -367,7 +367,7 @@ class TestCP0072ReversionSinUbicacion:
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.RETRASADO
 
@@ -397,7 +397,7 @@ class TestCP0068ReversionEstadoPrevioEnTransito:
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 200
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_TRANSITO
@@ -431,7 +431,7 @@ class TestCP0323ReversionEstadoPrevioEnSucursal:
             "nuevo_estado": "EN_SUCURSAL",
             "reusar_ubicacion_anterior": False,
             "nueva_ubicacion": UBICACION_VALIDA,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 200
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_SUCURSAL
@@ -444,18 +444,18 @@ class TestCP0073ReusoUbicacionEnReversion:
     def test_cp0073_reusar_ubicacion_al_revertir_retorna_200(
         self, client, headers_operador, headers_supervisor
     ):
-        """CP-0073 (HP) — Revertir RETRASADO con reusar_ubicacion_anterior=true retorna 200.
+        """CP-0073 (HP) — Supervisor revierte RETRASADO con reusar_ubicacion_anterior=true → 200.
 
         EN_TRANSITO no es obligatorio, por lo que reusar está permitido.
         La ubicación registrada en el paso anterior (RETRASADO) queda como última ubicación.
         """
         tid = _crear_envio(client, headers_operador)
         _avanzar_hasta(client, tid, "EN_TRANSITO", headers_operador)
-        _asignar_excepcion(client, tid, "RETRASADO", headers_supervisor)  # registra UBICACION_VALIDA como última
+        _asignar_excepcion(client, tid, "RETRASADO", headers_supervisor)
         resp = client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": True,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         assert resp.status_code == 200
 
     def test_cp0073_estado_actualizado_al_reusar(
@@ -468,7 +468,7 @@ class TestCP0073ReusoUbicacionEnReversion:
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": True,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         assert envio.estado == EstadoEnvioEnum.EN_TRANSITO
 
@@ -496,7 +496,7 @@ class TestCP0073ReusoUbicacionEnReversion:
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "EN_TRANSITO",
             "reusar_ubicacion_anterior": True,
-        }, headers=headers_operador)
+        }, headers=headers_supervisor)
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         evento_retrasado = (db_session.query(EventoDeEnvio)
                             .filter(EventoDeEnvio.envio_uuid == envio.uuid,
@@ -647,7 +647,6 @@ class TestCP0327AuditoriaNoRegistraFallo:
                           .filter(EventoDeEnvio.envio_uuid == envio.uuid,
                                   EventoDeEnvio.accion == AccionEnvioEnum.CAMBIO_ESTADO)
                           .count())
-        # Intentar asignar RETRASADO con calle vacía → 422
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "RETRASADO",
             "reusar_ubicacion_anterior": False,
@@ -671,7 +670,6 @@ class TestCP0327AuditoriaNoRegistraFallo:
                           .filter(EventoDeEnvio.envio_uuid == envio.uuid,
                                   EventoDeEnvio.accion == AccionEnvioEnum.CAMBIO_ESTADO)
                           .count())
-        # BLOQUEADO no es válido desde EN_TRANSITO → 422
         client.patch(f"/envios/{tid}/estado", json={
             "nuevo_estado": "BLOQUEADO",
             "reusar_ubicacion_anterior": False,
