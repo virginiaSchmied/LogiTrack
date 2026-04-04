@@ -216,12 +216,12 @@ def consultar_envio_publico(tracking_id: str, db: Session = Depends(get_db)):
     No requiere autenticación. CA-2, CA-3, CA-4, CA-5.
     """
     envio = (
-    db.query(Envio)
-    .filter(
-        Envio.tracking_id == tracking_id,
-        Envio.estado != "ELIMINADO"
-    )
-    .first()
+        db.query(Envio)
+        .filter(
+            Envio.tracking_id == tracking_id,
+            Envio.estado != "ELIMINADO"
+        )
+        .first()
 )
     if not envio:
         raise HTTPException(
