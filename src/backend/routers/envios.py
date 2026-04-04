@@ -626,6 +626,8 @@ def registrar_movimiento(
     tracking_id: str,
     payload: MovimientoCreate,
     db: Session = Depends(get_db),
+
+    current_user: Usuario = Depends(require_operador_supervisor),
 ):
     """
     Persiste un EventoDeEnvio de tipo MOVIMIENTO asociado al envío.

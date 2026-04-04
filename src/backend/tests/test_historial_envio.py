@@ -109,7 +109,7 @@ class TestCP0229EstructuraEntradas:
     def test_cp0229_movimiento_incluye_ubicacion(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: Entradas de tipo MOVIMIENTO incluyen ubicacion."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         movimiento = next(e for e in entradas if e["accion"] == "MOVIMIENTO")
@@ -188,7 +188,7 @@ class TestCP0234MovimientosFisicos:
     def test_cp0234_movimiento_aparece_en_historial(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: Un MOVIMIENTO registrado aparece en el historial."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         tipos = [e["accion"] for e in entradas]
@@ -197,7 +197,7 @@ class TestCP0234MovimientosFisicos:
     def test_cp0234_movimiento_muestra_ubicacion_ciudad_provincia(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: El movimiento en el historial muestra ciudad y provincia."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         mov = next(e for e in entradas if e["accion"] == "MOVIMIENTO")
@@ -208,7 +208,7 @@ class TestCP0234MovimientosFisicos:
         """CP-0234 (HP) — CA-6: El movimiento aparece intercalado entre los cambios de estado."""
         tid = _crear_envio(client, headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
@@ -223,6 +223,6 @@ class TestCP0234MovimientosFisicos:
         """CP-0234 (HP) — CA-6: Registrar un movimiento no modifica el estado del envío."""
         tid = _crear_envio(client, headers_supervisor)
         estado_antes = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         estado_despues = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
         assert estado_antes == estado_despues
