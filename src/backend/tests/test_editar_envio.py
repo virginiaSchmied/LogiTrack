@@ -81,6 +81,10 @@ class TestCP0207CP0208CP0215ControlAccesoContacto:
         tid = _crear_envio(client, headers_operador)
         assert client.patch(f"/envios/{tid}/operativo", json=PAYLOAD_OPERATIVO_VALIDO).status_code == 401
 
+    def test_cp0224_usuario_no_autenticado_no_puede_editar_operativo(self, client):
+        """CP-0224 (UP) — CA-7: Usuario sin token no puede acceder a la edición de datos operativos (401)."""
+        assert client.patch("/envios/LT-00000001/operativo", json=PAYLOAD_OPERATIVO_VALIDO).status_code == 401
+
 
 # ── LP-148 — Modificar datos de contacto ─────────────────────────────────────
 

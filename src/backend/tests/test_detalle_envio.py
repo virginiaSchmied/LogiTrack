@@ -54,8 +54,7 @@ def test_cp0195_detalle_responde_en_menos_de_3_segundos(client, headers_operador
 
 def test_cp0197_admin_no_puede_consultar_envio_por_tracking_id(client, headers_admin):
     """CP-0197 (UP) — CA-2: JWT con rol Administrador recibe 403 al consultar GET /envios/{tracking_id}."""
-    r = client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_admin)
-    # admin tampoco puede crear, así que usamos un tracking_id ficticio
+    # admin tampoco puede crear, usamos un tracking_id ficticio
     resp = client.get("/envios/LT-00000001", headers=headers_admin)
     assert resp.status_code == 403
 
