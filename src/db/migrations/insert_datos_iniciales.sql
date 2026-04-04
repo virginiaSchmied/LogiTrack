@@ -1,34 +1,37 @@
--- ==============================================
--- USUARIOS
--- ==============================================
+-- Contraseñas de cada usuario:
+--   admin@logitrack.com                 →  admin1234
+--   supervisor@logitrack.com            →  supervisor1234
+--   operador@logitrack.com              →  operador1234
+--   operador2@logitrack.com             →  operador1234
+
 INSERT INTO usuario (uuid, email, contrasena_hash, estado, rol_uuid) VALUES
     (
         'b1b2c3d4-0002-0002-0002-000000000001',
         'admin@logitrack.com',
-        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        '$2b$12$oLNMNhaCmbgvV4CEyb29IOsu9UvaK0d8C0RIroi.FiXRDpOoEBzCK',
         'ALTA',
-        '9438fc9c-b584-4873-8f00-694c4d8c4b6c'
+        (SELECT uuid FROM rol WHERE nombre = 'ADMINISTRADOR')
     ),
     (
         'b1b2c3d4-0002-0002-0002-000000000002',
         'supervisor@logitrack.com',
-        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        '$2b$12$A4n3vgBJ1uFpUoyzQazbUuy.RH1Ff.XtoLFAnuGdd394TTEOdCvC2',
         'ALTA',
-        '10974788-0589-4a53-bb6a-c5bce8e511ec'
+        (SELECT uuid FROM rol WHERE nombre = 'SUPERVISOR')
     ),
     (
         'b1b2c3d4-0002-0002-0002-000000000003',
         'operador@logitrack.com',
-        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        '$2b$12$AW8pzRHyJP0T26v5BChhmuU6UZkQR8d4C7oZZq5z1X2.o9MCAz5eO',
         'ALTA',
-        '96aa365b-d4b1-45a1-a9f5-3310c00b364b'
+        (SELECT uuid FROM rol WHERE nombre = 'OPERADOR')
     ),
     (
         'b1b2c3d4-0002-0002-0002-000000000004',
         'operador2@logitrack.com',
-        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGc.0n8X.6J1Q8Q8Q8Q8Q8Q8Q8u',
+        '$2b$12$T5iWFZDDoAtILCbTHtadDO2nDT1hsEF7iXZBaoZPktKyP/WXlJRe2',
         'BAJA',
-        '96aa365b-d4b1-45a1-a9f5-3310c00b364b'
+        (SELECT uuid FROM rol WHERE nombre = 'OPERADOR')
     )
 ON CONFLICT (uuid) DO NOTHING;
 

@@ -1,1 +1,1 @@
-ALTER TYPE estado_envio ADD VALUE 'EN_DEPOSITO';
+ALTER TYPE estado_envio ADD VALUE 'EN DEPOSITO';

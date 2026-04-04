@@ -41,73 +41,73 @@ PAYLOAD_VALIDO = {
 
 # ── LP-142 — Consulta por tracking ID ────────────────────────────────────────
 
-def test_cp0195_detalle_responde_en_menos_de_3_segundos(client):
+def test_cp0195_detalle_responde_en_menos_de_3_segundos(client, headers_operador):
     """CP-0195 — NFR: GET /envios/{tracking_id} debe responder en menos de 3 segundos."""
-    r = client.post("/envios/", json=PAYLOAD_VALIDO)
+    r = client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
     tracking_id = r.json()["tracking_id"]
     inicio = time.monotonic()
-    resp = client.get(f"/envios/{tracking_id}")
+    resp = client.get(f"/envios/{tracking_id}", headers=headers_operador)
     duracion = time.monotonic() - inicio
     assert resp.status_code == 200
     assert duracion < 3.0, f"Tiempo de respuesta: {duracion:.2f}s (límite: 3s)"
 
 
-def test_cp0199_tracking_id_inexistente_retorna_404_con_mensaje(client):
+def test_cp0199_tracking_id_inexistente_retorna_404_con_mensaje(client, headers_operador):
     """CP-0199 / CP-0204 — Tracking ID inexistente retorna 404 con mensaje descriptivo."""
-    resp = client.get("/envios/LT-99999999")
+    resp = client.get("/envios/LT-99999999", headers=headers_operador)
     assert resp.status_code == 404
     assert "detail" in resp.json()
     assert "LT-99999999" in resp.json()["detail"]
 
 
-def test_cp0205_tracking_id_con_caracteres_especiales_retorna_404(client):
+def test_cp0205_tracking_id_con_caracteres_especiales_retorna_404(client, headers_operador):
     """CP-0205 — Tracking ID con caracteres especiales retorna 404."""
-    resp = client.get("/envios/!!INVALIDO!!")
+    resp = client.get("/envios/!!INVALIDO!!", headers=headers_operador)
     assert resp.status_code == 404
 
 
 # ── LP-197 — Búsqueda por destinatario ───────────────────────────────────────
 
-def test_cp0247_busqueda_responde_en_menos_de_3_segundos(client):
+def test_cp0247_busqueda_responde_en_menos_de_3_segundos(client, headers_operador):
     """CP-0247 — NFR: GET /envios/?q=término debe responder en menos de 3 segundos."""
-    client.post("/envios/", json=PAYLOAD_VALIDO)
+    client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
     inicio = time.monotonic()
-    resp = client.get("/envios/?q=García")
+    resp = client.get("/envios/?q=García", headers=headers_operador)
     duracion = time.monotonic() - inicio
     assert resp.status_code == 200
     assert duracion < 3.0, f"Tiempo de respuesta: {duracion:.2f}s (límite: 3s)"
 
 
-def test_cp0251_busqueda_destinatario_inexistente_retorna_vacio(client):
+def test_cp0251_busqueda_destinatario_inexistente_retorna_vacio(client, headers_operador):
     """CP-0251 — Happy Path: búsqueda por destinatario sin coincidencias retorna lista vacía."""
-    client.post("/envios/", json=PAYLOAD_VALIDO)
-    resp = client.get("/envios/?q=DestinatarioQueNoExiste99999")
+    client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
+    resp = client.get("/envios/?q=DestinatarioQueNoExiste99999", headers=headers_operador)
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 0
     assert data["items"] == []
 
 
-def test_cp0252_cp0017_envios_eliminados_no_aparecen_en_listado(client, db_session):
+def test_cp0252_cp0017_envios_eliminados_no_aparecen_en_listado(client, db_session, headers_operador):
     """CP-0252 — Happy Path: envíos con estado ELIMINADO no aparecen en el listado."""
     from models import Envio
-    r = client.post("/envios/", json=PAYLOAD_VALIDO)
+    r = client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
     tracking_id = r.json()["tracking_id"]
 
     envio = db_session.query(Envio).filter(Envio.tracking_id == tracking_id).first()
     envio.estado = EstadoEnvioEnum.ELIMINADO
     db_session.commit()
 
-    resp = client.get("/envios/")
+    resp = client.get("/envios/", headers=headers_operador)
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
 
 
-def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client):
+def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client, headers_operador):
     """CP-0254 — Unhappy Path: q vacío retorna todos los envíos activos."""
-    client.post("/envios/", json=PAYLOAD_VALIDO)
-    client.post("/envios/", json=PAYLOAD_VALIDO)
-    resp = client.get("/envios/?q=")
+    client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
+    client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
+    resp = client.get("/envios/?q=", headers=headers_operador)
     assert resp.status_code == 200
     assert resp.json()["total"] == 2
 
@@ -117,15 +117,11 @@ def test_cp0254_busqueda_vacia_retorna_todos_los_activos(client):
 _PAYLOAD_CON_PROB = {**PAYLOAD_VALIDO, "probabilidad_retraso": 0.85}
 
 
-def test_cp0154_prioridad_visible_en_detalle_del_envio(client):
+def test_cp0154_prioridad_visible_en_detalle_del_envio(client, headers_operador):
     """CP-0154 (HP) — CA-5: La prioridad clasificada es visible en el detalle del envío."""
-    r = client.post("/envios/", json=_PAYLOAD_CON_PROB)
+    r = client.post("/envios/", json=_PAYLOAD_CON_PROB, headers=headers_operador)
     tid = r.json()["tracking_id"]
-    resp = client.get(f"/envios/{tid}")
+    resp = client.get(f"/envios/{tid}", headers=headers_operador)
     assert resp.status_code == 200
     assert "prioridad" in resp.json()
     assert resp.json()["prioridad"] in {"ALTA", "MEDIA", "BAJA"}
-
-
-
-
