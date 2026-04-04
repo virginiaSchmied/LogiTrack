@@ -45,17 +45,17 @@ UBICACION = {
 }
 
 
-def _crear_envio(client) -> str:
-    r = client.post("/envios/", json=PAYLOAD_ENVIO)
+def _crear_envio(client, headers) -> str:
+    r = client.post("/envios/", json=PAYLOAD_ENVIO, headers=headers)
     assert r.status_code == 201
     return r.json()["tracking_id"]
 
 
-def _cambiar_estado(client, tid: str, nuevo_estado: str, ubicacion: dict = None):
+def _cambiar_estado(client, tid: str, nuevo_estado: str, ubicacion: dict = None, headers=None):
     payload = {"nuevo_estado": nuevo_estado, "reusar_ubicacion_anterior": False}
     if ubicacion:
         payload["nueva_ubicacion"] = ubicacion
-    r = client.patch(f"/envios/{tid}/estado", json=payload)
+    r = client.patch(f"/envios/{tid}/estado", json=payload, headers=headers)
     assert r.status_code == 200
     return r
 
@@ -68,11 +68,11 @@ def _get_historial(client, tid: str):
 
 class TestCP0225CargaRapida:
 
-    def test_cp0225_historial_responde_en_menos_de_3_segundos(self, client):
+    def test_cp0225_historial_responde_en_menos_de_3_segundos(self, client, headers_supervisor):
         """CP-0225 (NFR) — GET /historial responde en menos de 3 segundos."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
-        _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION)
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION, headers=headers_supervisor)
 
         inicio = time.time()
         r = _get_historial(client, tid)
@@ -86,10 +86,10 @@ class TestCP0225CargaRapida:
 
 class TestCP0229EstructuraEntradas:
 
-    def test_cp0229_cada_entrada_tiene_accion_estado_fecha(self, client):
+    def test_cp0229_cada_entrada_tiene_accion_estado_fecha(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: Cada entrada tiene accion, estado y fecha_hora."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         for entrada in entradas:
@@ -97,18 +97,18 @@ class TestCP0229EstructuraEntradas:
             assert "estado" in entrada
             assert "fecha_hora" in entrada
 
-    def test_cp0229_entradas_no_incluyen_usuario(self, client):
+    def test_cp0229_entradas_no_incluyen_usuario(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: La respuesta no expone el usuario que realizó la acción."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         entradas = _get_historial(client, tid).json()
         for entrada in entradas:
             assert "usuario" not in entrada
             assert "usuario_email" not in entrada
             assert "usuario_uuid" not in entrada
 
-    def test_cp0229_movimiento_incluye_ubicacion(self, client):
+    def test_cp0229_movimiento_incluye_ubicacion(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: Entradas de tipo MOVIMIENTO incluyen ubicacion."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
 
         entradas = _get_historial(client, tid).json()
@@ -121,22 +121,22 @@ class TestCP0229EstructuraEntradas:
 
 class TestCP0230UnicoEstado:
 
-    def test_cp0230_envio_recien_creado_tiene_una_entrada(self, client):
+    def test_cp0230_envio_recien_creado_tiene_una_entrada(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: Envío recién creado → historial con 1 sola entrada."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         entradas = _get_historial(client, tid).json()
         assert len(entradas) == 1
 
-    def test_cp0230_unica_entrada_es_creacion_con_estado_registrado(self, client):
+    def test_cp0230_unica_entrada_es_creacion_con_estado_registrado(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: La única entrada es de tipo CREACION con estado REGISTRADO."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         entradas = _get_historial(client, tid).json()
         assert entradas[0]["accion"] == "CREACION"
         assert entradas[0]["estado"] == "REGISTRADO"
 
-    def test_cp0230_retorna_200_sin_errores(self, client):
+    def test_cp0230_retorna_200_sin_errores(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: El endpoint responde 200 para envío con único estado."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         assert _get_historial(client, tid).status_code == 200
 
 
@@ -144,35 +144,35 @@ class TestCP0230UnicoEstado:
 
 class TestCP0231ReversionExcepcion:
 
-    def test_cp0231_reversion_aparece_como_entrada_separada(self, client):
+    def test_cp0231_reversion_aparece_como_entrada_separada(self, client, headers_supervisor):
         """CP-0231 (HP) — CA-5: La reversión de un estado de excepción aparece en el historial."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
-        _cambiar_estado(client, tid, "RETRASADO", UBICACION)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)  # reversión
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)  # reversión
 
         entradas = _get_historial(client, tid).json()
         estados = [e["estado"] for e in entradas]
         assert "RETRASADO" in estados
         assert estados.count("EN_DEPOSITO") == 2  # primera vez + reversión
 
-    def test_cp0231_reversion_tiene_fecha_hora_propia(self, client):
+    def test_cp0231_reversion_tiene_fecha_hora_propia(self, client, headers_supervisor):
         """CP-0231 (HP) — CA-5: La entrada de reversión tiene su propia fecha y hora."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
-        _cambiar_estado(client, tid, "RETRASADO", UBICACION)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         for entrada in entradas:
             assert entrada["fecha_hora"] is not None
 
-    def test_cp0231_orden_cronologico_incluye_reversion(self, client):
+    def test_cp0231_orden_cronologico_incluye_reversion(self, client, headers_supervisor):
         """CP-0231 (HP) — CA-5: El historial con reversión está ordenado cronológicamente."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
-        _cambiar_estado(client, tid, "RETRASADO", UBICACION)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         acciones = [e["accion"] for e in entradas]
@@ -185,18 +185,18 @@ class TestCP0231ReversionExcepcion:
 
 class TestCP0234MovimientosFisicos:
 
-    def test_cp0234_movimiento_aparece_en_historial(self, client):
+    def test_cp0234_movimiento_aparece_en_historial(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: Un MOVIMIENTO registrado aparece en el historial."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
 
         entradas = _get_historial(client, tid).json()
         tipos = [e["accion"] for e in entradas]
         assert "MOVIMIENTO" in tipos
 
-    def test_cp0234_movimiento_muestra_ubicacion_ciudad_provincia(self, client):
+    def test_cp0234_movimiento_muestra_ubicacion_ciudad_provincia(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: El movimiento en el historial muestra ciudad y provincia."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_supervisor)
         client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
 
         entradas = _get_historial(client, tid).json()
@@ -204,12 +204,12 @@ class TestCP0234MovimientosFisicos:
         assert mov["ubicacion"]["ciudad"] == UBICACION["ciudad"]
         assert mov["ubicacion"]["provincia"] == UBICACION["provincia"]
 
-    def test_cp0234_movimiento_intercalado_cronologicamente(self, client):
+    def test_cp0234_movimiento_intercalado_cronologicamente(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: El movimiento aparece intercalado entre los cambios de estado."""
-        tid = _crear_envio(client)
-        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION)
+        tid = _crear_envio(client, headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
         client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
-        _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION)
+        _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION, headers=headers_supervisor)
 
         entradas = _get_historial(client, tid).json()
         tipos = [e["accion"] for e in entradas]
@@ -219,10 +219,10 @@ class TestCP0234MovimientosFisicos:
         assert idx_mov > tipos.index("CREACION")
         assert idx_mov < ultimo_cambio
 
-    def test_cp0234_movimiento_no_cambia_estado_del_envio(self, client):
+    def test_cp0234_movimiento_no_cambia_estado_del_envio(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: Registrar un movimiento no modifica el estado del envío."""
-        tid = _crear_envio(client)
-        estado_antes = client.get(f"/envios/{tid}").json()["estado"]
+        tid = _crear_envio(client, headers_supervisor)
+        estado_antes = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
         client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
-        estado_despues = client.get(f"/envios/{tid}").json()["estado"]
+        estado_despues = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
         assert estado_antes == estado_despues

@@ -39,8 +39,8 @@ PAYLOAD_ENVIO = {
 }
 
 
-def _crear_envio(client) -> str:
-    r = client.post("/envios/", json=PAYLOAD_ENVIO)
+def _crear_envio(client, headers) -> str:
+    r = client.post("/envios/", json=PAYLOAD_ENVIO, headers=headers)
     assert r.status_code == 201
     return r.json()["tracking_id"]
 
@@ -109,9 +109,9 @@ class TestCP0331ConfiguracionJob:
 
 class TestCP0332SoloEstadosActivos:
 
-    def test_cp0332_envio_terminal_no_se_actualiza(self, client, db_session, patch_db):
+    def test_cp0332_envio_terminal_no_se_actualiza(self, client, db_session, patch_db, headers_operador):
         """CP-0332 (HP) — CA-2: Un envío en estado terminal no es modificado por el scheduler."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         # Forzar estado terminal y prioridad incorrecta
         envio = db_session.query(Envio).filter(Envio.tracking_id == tid).first()
         envio.estado = EstadoEnvioEnum.ENTREGADO
@@ -125,9 +125,9 @@ class TestCP0332SoloEstadosActivos:
         db_session.refresh(envio)
         assert envio.prioridad == NivelPrioridadEnum.BAJA  # sin cambio
 
-    def test_cp0332_envio_activo_si_se_procesa(self, client, db_session, patch_db):
+    def test_cp0332_envio_activo_si_se_procesa(self, client, db_session, patch_db, headers_operador):
         """CP-0332 (HP) — CA-2: Un envío en estado activo sí es procesado por el scheduler."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         _forzar_prioridad(db_session, tid, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
 
         recalcular_prioridades()
@@ -136,10 +136,10 @@ class TestCP0332SoloEstadosActivos:
         db_session.refresh(envio)
         assert envio.prioridad != NivelPrioridadEnum.BAJA
 
-    def test_cp0332_terminales_ignorados_activos_procesados(self, client, db_session, patch_db):
+    def test_cp0332_terminales_ignorados_activos_procesados(self, client, db_session, patch_db, headers_operador):
         """CP-0332 (HP) — CA-2: Activos se actualizan y terminales permanecen sin cambio."""
-        tid_activo = _crear_envio(client)
-        tid_terminal = _crear_envio(client)
+        tid_activo = _crear_envio(client, headers_operador)
+        tid_terminal = _crear_envio(client, headers_operador)
 
         # activo: prioridad incorrecta → debe cambiar
         _forzar_prioridad(db_session, tid_activo, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
@@ -162,9 +162,9 @@ class TestCP0332SoloEstadosActivos:
 
 class TestCP0333PrioridadSeActualiza:
 
-    def test_cp0333_prioridad_cambia_cuando_fecha_es_proxima(self, client, db_session, patch_db):
+    def test_cp0333_prioridad_cambia_cuando_fecha_es_proxima(self, client, db_session, patch_db, headers_operador):
         """CP-0333 (HP) — CA-3: El scheduler actualiza la prioridad cuando el modelo da distinto resultado."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         # prob=0.9 + 1 día → modelo predice ALTA; forzamos BAJA para que haya cambio
         _forzar_prioridad(db_session, tid, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
 
@@ -174,9 +174,9 @@ class TestCP0333PrioridadSeActualiza:
         db_session.refresh(envio)
         assert envio.prioridad != NivelPrioridadEnum.BAJA
 
-    def test_cp0333_prioridad_persistida_en_db(self, client, db_session, patch_db):
+    def test_cp0333_prioridad_persistida_en_db(self, client, db_session, patch_db, headers_operador):
         """CP-0333 (HP) — CA-3: El cambio de prioridad queda persistido en la base de datos."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         _forzar_prioridad(db_session, tid, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
 
         recalcular_prioridades()
@@ -194,9 +194,9 @@ class TestCP0333PrioridadSeActualiza:
 
 class TestCP0334SinCambioNoPersiste:
 
-    def test_cp0334_prioridad_correcta_no_cambia(self, client, db_session, patch_db):
+    def test_cp0334_prioridad_correcta_no_cambia(self, client, db_session, patch_db, headers_operador):
         """CP-0334 (HP) — CA-4: Si la prioridad ya es correcta, el scheduler no la modifica."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         # prob=0.1 + 30 días → modelo predice BAJA; la dejamos en BAJA
         _forzar_prioridad(db_session, tid, NivelPrioridadEnum.BAJA, prob=0.1)
 
@@ -224,10 +224,10 @@ class TestCP0334SinCambioNoPersiste:
 
 class TestCP0335FalloIndividual:
 
-    def test_cp0335_proceso_continua_tras_fallo_en_un_envio(self, client, db_session, patch_db):
+    def test_cp0335_proceso_continua_tras_fallo_en_un_envio(self, client, db_session, patch_db, headers_operador):
         """CP-0335 (HP) — CA-5: Si un envío falla, los demás siguen siendo procesados."""
-        tid1 = _crear_envio(client)
-        tid2 = _crear_envio(client)
+        tid1 = _crear_envio(client, headers_operador)
+        tid2 = _crear_envio(client, headers_operador)
         _forzar_prioridad(db_session, tid1, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
         _forzar_prioridad(db_session, tid2, NivelPrioridadEnum.BAJA, prob=0.9, fecha=_MANANA)
 
@@ -254,9 +254,9 @@ class TestCP0335FalloIndividual:
         actualizados = sum(1 for p in prioridades.values() if p == NivelPrioridadEnum.ALTA)
         assert actualizados >= 1
 
-    def test_cp0335_scheduler_no_lanza_excepcion_ante_fallo(self, client, patch_db):
+    def test_cp0335_scheduler_no_lanza_excepcion_ante_fallo(self, client, patch_db, headers_operador):
         """CP-0335 (HP) — CA-5: El scheduler no propaga la excepción del fallo individual."""
-        _crear_envio(client)
+        _crear_envio(client, headers_operador)
 
         with patch.object(scheduler_module, 'predecir_prioridad', side_effect=ValueError("fallo")):
             try:

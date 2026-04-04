@@ -305,6 +305,8 @@ def eliminar_envio(
         raise HTTPException(status_code=404, detail=f"Envío {tracking_id} no encontrado")
     if envio.estado == EstadoEnvioEnum.ELIMINADO:
         raise HTTPException(status_code=409, detail=f"Envío {tracking_id} ya fue eliminado")
+    if envio.estado != EstadoEnvioEnum.CANCELADO:
+        raise HTTPException(status_code=422, detail=f"El envío debe estar en estado CANCELADO para ser eliminado")
 
     estado_anterior = envio.estado
     envio.estado    = EstadoEnvioEnum.ELIMINADO

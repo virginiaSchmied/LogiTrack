@@ -1,3 +1,4 @@
+import uuid as _uuid_mod
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -19,10 +20,10 @@ def obtener_eventos(
     query = db.query(EventoDeUsuario)
 
     if usuario_afectado_uuid:
-        query = query.filter(EventoDeUsuario.usuario_afectado_uuid == usuario_afectado_uuid)
+        query = query.filter(EventoDeUsuario.usuario_afectado_uuid == _uuid_mod.UUID(usuario_afectado_uuid))
 
     if usuario_ejecutor_uuid:
-        query = query.filter(EventoDeUsuario.usuario_ejecutor_uuid == usuario_ejecutor_uuid)
+        query = query.filter(EventoDeUsuario.usuario_ejecutor_uuid == _uuid_mod.UUID(usuario_ejecutor_uuid))
 
     query = query.order_by(EventoDeUsuario.fecha_hora.desc())
 

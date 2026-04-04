@@ -49,8 +49,8 @@ UBICACION_2 = {
 }
 
 
-def _crear_envio(client) -> str:
-    r = client.post("/envios/", json=PAYLOAD_ENVIO)
+def _crear_envio(client, headers) -> str:
+    r = client.post("/envios/", json=PAYLOAD_ENVIO, headers=headers)
     assert r.status_code == 201
     return r.json()["tracking_id"]
 
@@ -63,21 +63,21 @@ def _registrar_movimiento(client, tid: str, ubicacion: dict):
 
 class TestCP0292RegistroExitoso:
 
-    def test_cp0292_post_movimiento_retorna_201(self, client):
+    def test_cp0292_post_movimiento_retorna_201(self, client, headers_operador):
         """CP-0292 (HP) — CA-1: POST /movimientos con ubicación válida devuelve 201."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         r = _registrar_movimiento(client, tid, UBICACION_1)
         assert r.status_code == 201
 
-    def test_cp0292_respuesta_incluye_mensaje_de_confirmacion(self, client):
+    def test_cp0292_respuesta_incluye_mensaje_de_confirmacion(self, client, headers_operador):
         """CP-0292 (HP) — CA-1: La respuesta incluye un mensaje de confirmación."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         r = _registrar_movimiento(client, tid, UBICACION_1)
         assert "mensaje" in r.json()
 
-    def test_cp0292_movimiento_queda_en_historial_del_envio(self, client):
+    def test_cp0292_movimiento_queda_en_historial_del_envio(self, client, headers_operador):
         """CP-0292 (HP) — CA-1: El movimiento persiste como EventoDeEnvio de tipo MOVIMIENTO."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         _registrar_movimiento(client, tid, UBICACION_1)
 
         historial = client.get(f"/envios/{tid}/historial").json()
@@ -89,15 +89,15 @@ class TestCP0292RegistroExitoso:
 
 class TestCP0296ValidacionUbicacion:
 
-    def test_cp0296_sin_ubicacion_retorna_422(self, client):
+    def test_cp0296_sin_ubicacion_retorna_422(self, client, headers_operador):
         """CP-0296 (UP) — CA-3: POST /movimientos sin campo ubicación devuelve 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         r = client.post(f"/envios/{tid}/movimientos", json={})
         assert r.status_code == 422
 
-    def test_cp0296_ubicacion_nula_retorna_422(self, client):
+    def test_cp0296_ubicacion_nula_retorna_422(self, client, headers_operador):
         """CP-0296 (UP) — CA-3: POST /movimientos con ubicación null devuelve 422."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         r = client.post(f"/envios/{tid}/movimientos", json={"ubicacion": None})
         assert r.status_code == 422
 
@@ -111,9 +111,9 @@ class TestCP0296ValidacionUbicacion:
 
 class TestCP0297MultiplesMovimientos:
 
-    def test_cp0297_segundo_movimiento_se_agrega_al_historial(self, client):
+    def test_cp0297_segundo_movimiento_se_agrega_al_historial(self, client, headers_operador):
         """CP-0297 (HP) — CA-4: Un segundo movimiento se agrega al historial sin reemplazar el anterior."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         _registrar_movimiento(client, tid, UBICACION_1)
         _registrar_movimiento(client, tid, UBICACION_2)
 
@@ -121,9 +121,9 @@ class TestCP0297MultiplesMovimientos:
         movimientos = [e for e in historial if e["accion"] == "MOVIMIENTO"]
         assert len(movimientos) == 2
 
-    def test_cp0297_primer_movimiento_no_se_modifica(self, client):
+    def test_cp0297_primer_movimiento_no_se_modifica(self, client, headers_operador):
         """CP-0297 (HP) — CA-4: El primer movimiento mantiene su ubicación original tras agregar un segundo."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         _registrar_movimiento(client, tid, UBICACION_1)
         _registrar_movimiento(client, tid, UBICACION_2)
 
@@ -137,8 +137,8 @@ class TestCP0297MultiplesMovimientos:
 
 class TestCP0299Acceso:
 
-    def test_cp0299_endpoint_accesible_sin_auth(self, client):
+    def test_cp0299_endpoint_accesible_sin_auth(self, client, headers_operador):
         """CP-0299 (HP) — CA-6: POST /movimientos devuelve 201 (control de rol pendiente de JWT)."""
-        tid = _crear_envio(client)
+        tid = _crear_envio(client, headers_operador)
         r = _registrar_movimiento(client, tid, UBICACION_1)
         assert r.status_code == 201

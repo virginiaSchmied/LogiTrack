@@ -132,7 +132,7 @@ class TestCP0211TrackingIdNoEditable:
         tid = _crear_envio(client, headers_operador)
         payload = {**PAYLOAD_CONTACTO_VALIDO, "tracking_id": "LT-99999999"}
         client.patch(f"/envios/{tid}/contacto", json=payload, headers=headers_operador)
-        resp = client.get(f"/envios/{tid}")
+        resp = client.get(f"/envios/{tid}", headers=headers_operador)
         assert resp.status_code == 200
         assert resp.json()["tracking_id"] == tid
 
