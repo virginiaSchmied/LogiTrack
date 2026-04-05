@@ -306,14 +306,14 @@ class TestCP0111MovimientoAutomatico:
     def test_cp0111_movimiento_genera_evento(self, client, db_session, headers_supervisor):
         """CP-0111 (HP) — CA-7: POST /movimientos genera EventoDeEnvio con accion = MOVIMIENTO."""
         tid, uuid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         acciones = [e.accion for e in _eventos_de(db_session, uuid)]
         assert AccionEnvioEnum.MOVIMIENTO in acciones
 
     def test_cp0111_evento_estado_inicial_igual_final(self, client, db_session, headers_supervisor):
         """CP-0111 (HP) — CA-7: En MOVIMIENTO, estado_inicial == estado_final == estado actual."""
         tid, uuid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         evento = next(
             e for e in _eventos_de(db_session, uuid)
             if e.accion == AccionEnvioEnum.MOVIMIENTO
@@ -324,7 +324,7 @@ class TestCP0111MovimientoAutomatico:
     def test_cp0111_evento_registra_ubicacion_nueva(self, client, db_session, headers_supervisor):
         """CP-0111 (HP) — CA-7: El EventoDeEnvio de MOVIMIENTO incluye ubicacion_actual_id."""
         tid, uuid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         evento = next(
             e for e in _eventos_de(db_session, uuid)
             if e.accion == AccionEnvioEnum.MOVIMIENTO
@@ -339,7 +339,7 @@ class TestCP0112MovimientoInvalido:
     def test_cp0112_ubicacion_faltante_retorna_422(self, client, headers_supervisor):
         """CP-0112 (UP) — CA-7: POST /movimientos sin ubicación devuelve 422."""
         tid, _ = _crear_envio(client, headers_supervisor)
-        r = client.post(f"/envios/{tid}/movimientos", json={})
+        r = client.post(f"/envios/{tid}/movimientos", json={}, headers=headers_supervisor)
         assert r.status_code == 422
 
     def test_cp0112_ubicacion_invalida_no_genera_evento(self, client, db_session, headers_supervisor):

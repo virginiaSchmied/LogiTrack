@@ -2,12 +2,12 @@
 Tests para consulta de envío por tracking ID y búsqueda por destinatario.
 
 Cubre:
-  LP-142 — Consultar envío por tracking ID        (CP-0195, CP-0199, CP-0200, CP-0204, CP-0205)
-  LP-197 — Buscar envío por datos del destinatario (CP-0247, CP-0251, CP-0252, CP-0254)
+  LP-142 — Consultar envío por tracking ID        (CP-0195, CP-0197, CP-0198, CP-0199, CP-0200, CP-0204, CP-0205)
+  LP-197 — Buscar envío por datos del destinatario (CP-0247, CP-0249, CP-0250, CP-0251, CP-0252, CP-0253, CP-0254)
 
-Tests NO implementados (requieren autenticación JWT, no disponible en este prototipo):
-  CP-0196, CP-0197, CP-0198, CP-0201, CP-0202, CP-0203 — requieren JWT con roles
-  CP-0248, CP-0249, CP-0250, CP-0253               — requieren JWT con roles
+Tests NO implementados (requieren JWT con roles específicos):
+  CP-0196, CP-0201, CP-0202, CP-0203 — requieren JWT con roles
+  CP-0248                            — requiere JWT con roles
 """
 import time
 from datetime import date, timedelta
@@ -52,6 +52,21 @@ def test_cp0195_detalle_responde_en_menos_de_3_segundos(client, headers_operador
     assert duracion < 3.0, f"Tiempo de respuesta: {duracion:.2f}s (límite: 3s)"
 
 
+def test_cp0197_admin_no_puede_consultar_envio_por_tracking_id(client, headers_admin):
+    """CP-0197 (UP) — CA-2: JWT con rol Administrador recibe 403 al consultar GET /envios/{tracking_id}."""
+    # admin tampoco puede crear, usamos un tracking_id ficticio
+    resp = client.get("/envios/LT-00000001", headers=headers_admin)
+    assert resp.status_code == 403
+
+
+def test_cp0198_sin_token_retorna_401_al_consultar_envio(client, headers_operador):
+    """CP-0198 (EC) — CA-2: Request sin header Authorization retorna 401 al consultar GET /envios/{tracking_id}."""
+    r = client.post("/envios/", json=PAYLOAD_VALIDO, headers=headers_operador)
+    tracking_id = r.json()["tracking_id"]
+    resp = client.get(f"/envios/{tracking_id}")
+    assert resp.status_code == 401
+
+
 def test_cp0199_tracking_id_inexistente_retorna_404_con_mensaje(client, headers_operador):
     """CP-0199 / CP-0204 — Tracking ID inexistente retorna 404 con mensaje descriptivo."""
     resp = client.get("/envios/LT-99999999", headers=headers_operador)
@@ -76,6 +91,24 @@ def test_cp0247_busqueda_responde_en_menos_de_3_segundos(client, headers_operado
     duracion = time.monotonic() - inicio
     assert resp.status_code == 200
     assert duracion < 3.0, f"Tiempo de respuesta: {duracion:.2f}s (límite: 3s)"
+
+
+def test_cp0249_admin_no_puede_buscar_por_destinatario(client, headers_admin):
+    """CP-0249 (UP) — CA-2: JWT con rol Administrador recibe 403 al buscar GET /envios/?q=..."""
+    resp = client.get("/envios/?q=García", headers=headers_admin)
+    assert resp.status_code == 403
+
+
+def test_cp0250_sin_token_retorna_401_al_buscar_por_destinatario(client):
+    """CP-0250 (EC) — CA-2: Request sin header Authorization retorna 401 al buscar GET /envios/?q=..."""
+    resp = client.get("/envios/?q=García")
+    assert resp.status_code == 401
+
+
+def test_cp0253_usuario_no_autenticado_no_puede_acceder_a_busqueda(client):
+    """CP-0253 (HP) — CA-5: Usuario sin token no puede acceder a la búsqueda por destinatario (401)."""
+    resp = client.get("/envios/")
+    assert resp.status_code == 401
 
 
 def test_cp0251_busqueda_destinatario_inexistente_retorna_vacio(client, headers_operador):
