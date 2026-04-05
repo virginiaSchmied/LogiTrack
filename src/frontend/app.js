@@ -783,7 +783,7 @@ async function confirmarMovimiento() {
   try {
     const res = await fetch(`${API_BASE}/envios/${encodeURIComponent(trackingId)}/movimientos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ ubicacion: { calle, numero, ciudad, provincia, codigo_postal: cp } }),
     });
     if (!res.ok) {

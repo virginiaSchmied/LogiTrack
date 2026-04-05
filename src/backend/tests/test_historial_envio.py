@@ -8,15 +8,15 @@ Cubre:
   CP-0229 (HP)   — CA-3: Cada entrada tiene los campos correctos y no incluye usuario
   CP-0230 (HP)   — CA-4: Historial con un único estado (recién creado)
   CP-0231 (HP)   — CA-5: Historial incluye reversiones de excepción
+  CP-0227 (UP)   — CA-2: JWT rol = Administrador → 403
+  CP-0228 (EC)   — CA-2: Sin Authorization → 401
+  CP-0232 (UP)   — CA-5: JWT rol = Administrador → 403 al consultar historial con reversión
+  CP-0233 (EC)   — CA-5: Sin Authorization → 401
   CP-0234 (HP)   — CA-6: Historial incluye movimientos físicos con ubicación
   CP-0236 (HP)   — CA-7: Acceso restringido a usuarios no autenticados → 401
 
 Tests NO implementados (requieren JWT y control de roles):
   CP-0226 — CA-2: JWT rol ∈ {Operador, Supervisor} → acceso permitido
-  CP-0227 — CA-2: JWT rol = Administrador → 403
-  CP-0228 — CA-2: Sin Authorization → 401
-  CP-0232 — CA-5: JWT rol = Administrador → 403
-  CP-0233 — CA-5: Sin Authorization → 401
   CP-0235 — CA-7: Usuario autenticado puede acceder
 """
 import time
@@ -60,8 +60,8 @@ def _cambiar_estado(client, tid: str, nuevo_estado: str, ubicacion: dict = None,
     return r
 
 
-def _get_historial(client, tid: str, headers: dict = None):
-    return client.get(f"/envios/{tid}/historial", headers=headers or {})
+def _get_historial(client, tid: str, headers=None):
+    return client.get(f"/envios/{tid}/historial", headers=headers)
 
 
 # ── CP-0225 — NFR: carga en menos de 3 segundos ──────────────────────────────
@@ -75,7 +75,7 @@ class TestCP0225CargaRapida:
         _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION, headers=headers_supervisor)
 
         inicio = time.time()
-        r = _get_historial(client, tid, headers=headers_supervisor)
+        r = _get_historial(client, tid, headers_supervisor)
         elapsed = time.time() - inicio
 
         assert r.status_code == 200
@@ -91,7 +91,7 @@ class TestCP0229EstructuraEntradas:
         tid = _crear_envio(client, headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         for entrada in entradas:
             assert "accion" in entrada
             assert "estado" in entrada
@@ -100,7 +100,7 @@ class TestCP0229EstructuraEntradas:
     def test_cp0229_entradas_no_incluyen_usuario(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: La respuesta no expone el usuario que realizó la acción."""
         tid = _crear_envio(client, headers_supervisor)
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         for entrada in entradas:
             assert "usuario" not in entrada
             assert "usuario_email" not in entrada
@@ -109,9 +109,9 @@ class TestCP0229EstructuraEntradas:
     def test_cp0229_movimiento_incluye_ubicacion(self, client, headers_supervisor):
         """CP-0229 (HP) — CA-3: Entradas de tipo MOVIMIENTO incluyen ubicacion."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         movimiento = next(e for e in entradas if e["accion"] == "MOVIMIENTO")
         assert movimiento["ubicacion"] is not None
         assert movimiento["ubicacion"]["ciudad"] == UBICACION["ciudad"]
@@ -124,20 +124,20 @@ class TestCP0230UnicoEstado:
     def test_cp0230_envio_recien_creado_tiene_una_entrada(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: Envío recién creado → historial con 1 sola entrada."""
         tid = _crear_envio(client, headers_supervisor)
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         assert len(entradas) == 1
 
     def test_cp0230_unica_entrada_es_creacion_con_estado_registrado(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: La única entrada es de tipo CREACION con estado REGISTRADO."""
         tid = _crear_envio(client, headers_supervisor)
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         assert entradas[0]["accion"] == "CREACION"
         assert entradas[0]["estado"] == "REGISTRADO"
 
     def test_cp0230_retorna_200_sin_errores(self, client, headers_supervisor):
         """CP-0230 (HP) — CA-4: El endpoint responde 200 para envío con único estado."""
         tid = _crear_envio(client, headers_supervisor)
-        assert _get_historial(client, tid, headers=headers_supervisor).status_code == 200
+        assert _get_historial(client, tid, headers_supervisor).status_code == 200
 
 
 # ── CP-0231 — CA-5: reversiones de excepción ─────────────────────────────────
@@ -151,7 +151,7 @@ class TestCP0231ReversionExcepcion:
         _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)  # reversión
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         estados = [e["estado"] for e in entradas]
         assert "RETRASADO" in estados
         assert estados.count("EN_DEPOSITO") == 2  # primera vez + reversión
@@ -163,7 +163,7 @@ class TestCP0231ReversionExcepcion:
         _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         for entrada in entradas:
             assert entrada["fecha_hora"] is not None
 
@@ -174,7 +174,7 @@ class TestCP0231ReversionExcepcion:
         _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         acciones = [e["accion"] for e in entradas]
         # CREACION → CAMBIO_ESTADO × 3 en orden
         assert acciones[0] == "CREACION"
@@ -188,18 +188,18 @@ class TestCP0234MovimientosFisicos:
     def test_cp0234_movimiento_aparece_en_historial(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: Un MOVIMIENTO registrado aparece en el historial."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         tipos = [e["accion"] for e in entradas]
         assert "MOVIMIENTO" in tipos
 
     def test_cp0234_movimiento_muestra_ubicacion_ciudad_provincia(self, client, headers_supervisor):
         """CP-0234 (HP) — CA-6: El movimiento en el historial muestra ciudad y provincia."""
         tid = _crear_envio(client, headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         mov = next(e for e in entradas if e["accion"] == "MOVIMIENTO")
         assert mov["ubicacion"]["ciudad"] == UBICACION["ciudad"]
         assert mov["ubicacion"]["provincia"] == UBICACION["provincia"]
@@ -208,10 +208,10 @@ class TestCP0234MovimientosFisicos:
         """CP-0234 (HP) — CA-6: El movimiento aparece intercalado entre los cambios de estado."""
         tid = _crear_envio(client, headers_supervisor)
         _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         _cambiar_estado(client, tid, "EN_TRANSITO", UBICACION, headers=headers_supervisor)
 
-        entradas = _get_historial(client, tid, headers=headers_supervisor).json()
+        entradas = _get_historial(client, tid, headers_supervisor).json()
         tipos = [e["accion"] for e in entradas]
         # CREACION, CAMBIO_ESTADO, MOVIMIENTO, CAMBIO_ESTADO
         idx_mov = tipos.index("MOVIMIENTO")
@@ -223,7 +223,7 @@ class TestCP0234MovimientosFisicos:
         """CP-0234 (HP) — CA-6: Registrar un movimiento no modifica el estado del envío."""
         tid = _crear_envio(client, headers_supervisor)
         estado_antes = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
         estado_despues = client.get(f"/envios/{tid}", headers=headers_supervisor).json()["estado"]
         assert estado_antes == estado_despues
 
@@ -272,3 +272,35 @@ class TestCP0236AccesoNoAutenticado:
         tid = _crear_envio(client, headers_supervisor)
         resp = _get_historial(client, tid, headers=headers_supervisor)
         assert resp.status_code == 200
+
+class TestCP0227CP0228CP0232CP0233ControlAccesoHistorial:
+
+    def test_cp0227_admin_no_puede_ver_historial_retorna_403(self, client, headers_operador, headers_admin):
+        """CP-0227 (UP) — CA-2: JWT con rol Administrador recibe 403 al consultar historial."""
+        tid = _crear_envio(client, headers_operador)
+        resp = client.get(f"/envios/{tid}/historial", headers=headers_admin)
+        assert resp.status_code == 403
+
+    def test_cp0228_sin_token_retorna_401_al_ver_historial(self, client, headers_operador):
+        """CP-0228 (EC) — CA-2: Request sin header Authorization retorna 401 al consultar historial."""
+        tid = _crear_envio(client, headers_operador)
+        resp = client.get(f"/envios/{tid}/historial")
+        assert resp.status_code == 401
+
+    def test_cp0232_admin_no_puede_ver_historial_con_reversion_retorna_403(self, client, headers_operador, headers_supervisor, headers_admin):
+        """CP-0232 (UP) — CA-5: JWT con rol Administrador recibe 403 al consultar historial con reversión."""
+        tid = _crear_envio(client, headers_operador)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        resp = client.get(f"/envios/{tid}/historial", headers=headers_admin)
+        assert resp.status_code == 403
+
+    def test_cp0233_sin_token_retorna_401_al_ver_historial_con_reversion(self, client, headers_operador, headers_supervisor):
+        """CP-0233 (EC) — CA-5: Request sin header Authorization retorna 401 al consultar historial con reversión."""
+        tid = _crear_envio(client, headers_operador)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "RETRASADO", UBICACION, headers=headers_supervisor)
+        _cambiar_estado(client, tid, "EN_DEPOSITO", UBICACION, headers=headers_supervisor)
+        resp = client.get(f"/envios/{tid}/historial")
+        assert resp.status_code == 401
