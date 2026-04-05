@@ -28,6 +28,7 @@ Nota sobre CP-0189:
   público (CA-5).
 """
 
+
 # ── CP-0189: Sin token en endpoint privado de tracking → 401 ─────────────────
 
 def test_cp0189_sin_token_endpoint_privado_tracking_retorna_401(client):
