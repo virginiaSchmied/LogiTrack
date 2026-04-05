@@ -273,6 +273,7 @@ class TestCP0236AccesoNoAutenticado:
         resp = _get_historial(client, tid, headers=headers_supervisor)
         assert resp.status_code == 200
 
+
 class TestCP0227CP0228CP0232CP0233ControlAccesoHistorial:
 
     def test_cp0227_admin_no_puede_ver_historial_retorna_403(self, client, headers_operador, headers_admin):
