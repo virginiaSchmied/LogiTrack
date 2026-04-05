@@ -4,7 +4,7 @@ Tests para la edición de envíos.
 Cubre:
   LP-148 — Modificar datos de contacto del envío  (CP-0209..CP-0213)
   LP-154 — Modificar datos operativos del envío   (CP-0216..CP-0223)
-  LP-21  — Control de acceso por rol              (CP-0206..CP-0208, CP-0214, CP-0215, CP-0224)
+  LP-21  — Control de acceso por rol              (CP-0207, CP-0208, CP-0215, CP-0214, CP-0224)
 """
 from datetime import date, timedelta
 
@@ -58,19 +58,32 @@ def _crear_envio(client, headers) -> str:
     return r.json()["tracking_id"]
 
 
-# ── LP-21 — Control de acceso ─────────────────────────────────────────────────
+# ── CP-0207 / CP-0208 / CP-0215 / CP-0214 — control de acceso ────────────────
 
-class TestControlAccesoEdicion:
+class TestCP0207CP0208CP0215ControlAccesoContacto:
 
-    def test_sin_token_patch_contacto_retorna_401(self, client, headers_operador):
-        """CP-0206 — Sin token → 401 en PATCH /contacto."""
+    def test_cp0207_admin_no_puede_editar_contacto_retorna_403(self, client, headers_operador, headers_admin):
+        """CP-0207 (UP) — CA-1: JWT con rol Administrador recibe 403 al editar datos de contacto."""
+        tid = _crear_envio(client, headers_operador)
+        assert client.patch(f"/envios/{tid}/contacto", json=PAYLOAD_CONTACTO_VALIDO, headers=headers_admin).status_code == 403
+
+    def test_cp0208_sin_token_retorna_401_al_editar_contacto(self, client, headers_operador):
+        """CP-0208 (EC) — CA-1: Request sin header Authorization retorna 401 al editar datos de contacto."""
         tid = _crear_envio(client, headers_operador)
         assert client.patch(f"/envios/{tid}/contacto", json=PAYLOAD_CONTACTO_VALIDO).status_code == 401
 
-    def test_sin_token_patch_operativo_retorna_401(self, client, headers_operador):
+    def test_cp0215_usuario_no_autenticado_no_puede_editar_envio(self, client):
+        """CP-0215 (UP) — CA-6: Usuario sin token no puede acceder a la edición de envío (401)."""
+        assert client.patch("/envios/LT-00000001/contacto", json=PAYLOAD_CONTACTO_VALIDO).status_code == 401
+
+    def test_cp0214_sin_token_retorna_401_al_editar_operativo(self, client, headers_operador):
         """CP-0214 — Sin token → 401 en PATCH /operativo."""
         tid = _crear_envio(client, headers_operador)
         assert client.patch(f"/envios/{tid}/operativo", json=PAYLOAD_OPERATIVO_VALIDO).status_code == 401
+
+    def test_cp0224_usuario_no_autenticado_no_puede_editar_operativo(self, client):
+        """CP-0224 (UP) — CA-7: Usuario sin token no puede acceder a la edición de datos operativos (401)."""
+        assert client.patch("/envios/LT-00000001/operativo", json=PAYLOAD_OPERATIVO_VALIDO).status_code == 401
 
 
 # ── LP-148 — Modificar datos de contacto ─────────────────────────────────────

@@ -531,6 +531,9 @@
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;">
         <button class="btn btn-estado btn-sm" id="btn-cambiar-estado" style="display:none;" aria-label="Editar estado del envío">Editar estado</button>
+        <div id="msg-excepcion" style="display:none; font-size:.8rem; color:var(--text-sub); max-width:260px; line-height:1.3;">
+          ⚠️ El envío está en estado de excepción. Contacte a un supervisor para revertirlo.
+        </div>
         <button class="btn btn-ghost btn-sm" id="btn-movimiento" style="display:none;" aria-label="Registrar movimiento">Registrar movimiento</button>
         <button class="btn btn-ghost btn-sm" id="btn-editar" style="display:none;" aria-label="Editar envío">Editar</button>
         <button class="btn btn-danger btn-sm" id="btn-eliminar" style="display:none;" aria-label="Eliminar envío">Eliminar</button>
@@ -542,7 +545,7 @@
         <button class="edit-tab active" id="detalle-tab-info" onclick="switchDetalleTab('info')">Información</button>
         <button class="edit-tab" id="detalle-tab-historial" onclick="switchDetalleTab('historial')">Historial</button>
       </div>
-      <button class="btn btn-ghost btn-sm" id="btn-auditoria" onclick="openAuditoria()" aria-label="Ver auditoría del envío">Ver auditoría</button>
+      <button class="btn btn-ghost btn-sm" id="btn-auditoria"style="display: none;" onclick="openAuditoria()" aria-label="Ver auditoría del envío">Ver auditoría</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>

@@ -109,7 +109,7 @@ class TestCP0242TodasLasAcciones:
         }, headers=headers_supervisor)
 
         # MOVIMIENTO físico
-        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION})
+        client.post(f"/envios/{tid}/movimientos", json={"ubicacion": UBICACION}, headers=headers_supervisor)
 
         # CAMBIO_ESTADO: EN_DEPOSITO → CANCELADO (no requiere ubicación)
         client.patch(f"/envios/{tid}/estado", json={"nuevo_estado": "CANCELADO"}, headers=headers_supervisor)

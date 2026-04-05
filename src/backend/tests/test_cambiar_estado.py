@@ -15,11 +15,12 @@ Cubre:
     CP-0320  CA-3  Estado con ubicación obligatoria + reusar=true        (Unhappy Path)
     CP-0321  CA-4  Saltar estado inválido retorna 422                    (Unhappy Path)
 
+    CP-0038  CA-8  Solo admin intenta cambiar estado → 403           (Unhappy Path)
+    CP-0039  CA-8  Request sin Authorization → 401                   (Edge Case)
+
 Tests NO implementados (requieren autenticación JWT, no disponible en este prototipo):
   CP-0028  CA-1  — requiere frontend / JWT
   CP-0035  CA-5  — requiere JWT con rol = Supervisor
-  CP-0038  CA-7  — requiere JWT con rol = Administrador → 403
-  CP-0039  CA-7  — requiere request sin Authorization → 401
 """
 from datetime import date, timedelta
 
@@ -549,3 +550,28 @@ class TestCP0321SaltarEstado:
             "nueva_ubicacion": UBICACION_VALIDA,
         }, headers=headers_operador)
         assert resp.status_code == 422
+
+
+# ── CP-0038 / CP-0039 — CA-8: control de acceso ──────────────────────────────
+
+class TestCP0038CP0039ControlAccesoEstado:
+
+    def test_cp0038_admin_no_puede_cambiar_estado_retorna_403(self, client, headers_operador, headers_admin):
+        """CP-0038 (UP) — CA-8: JWT con rol Administrador recibe 403 al intentar cambiar estado."""
+        tid = _crear_envio(client, headers_operador)
+        resp = client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "EN_DEPOSITO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        }, headers=headers_admin)
+        assert resp.status_code == 403
+
+    def test_cp0039_sin_token_retorna_401_al_cambiar_estado(self, client, headers_operador):
+        """CP-0039 (EC) — CA-8: Request sin header Authorization retorna 401 al cambiar estado."""
+        tid = _crear_envio(client, headers_operador)
+        resp = client.patch(f"/envios/{tid}/estado", json={
+            "nuevo_estado": "EN_DEPOSITO",
+            "reusar_ubicacion_anterior": False,
+            "nueva_ubicacion": UBICACION_VALIDA,
+        })
+        assert resp.status_code == 401
