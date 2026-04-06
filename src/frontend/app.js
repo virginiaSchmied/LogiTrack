@@ -1776,12 +1776,12 @@ function _renderAuditoriaPage() {
             ? new Date(item.fecha_hora).toLocaleString('es-AR')
             : '';
         tr.innerHTML = `
-            <td>${escHtml(item.accion || '')}</td>
-            <td>${escHtml(item.usuario_ejecutor_uuid || '')}</td>
-            <td>${escHtml(item.usuario_afectado_uuid || '')}</td>
-            <td>${escHtml(item.estado_inicial || '')}</td>
-            <td>${escHtml(item.estado_final || '')}</td>
-            <td>${escHtml(fechaHora)}</td>
+            <td data-label="Acción">${escHtml(item.accion || '')}</td>
+            <td data-label="Ejecutor">${escHtml(item.usuario_ejecutor_uuid || '')}</td>
+            <td data-label="Afectado">${escHtml(item.usuario_afectado_uuid || '')}</td>
+            <td data-label="Estado inicial">${escHtml(item.estado_inicial || '')}</td>
+            <td data-label="Estado final">${escHtml(item.estado_final || '')}</td>
+            <td data-label="Fecha">${escHtml(fechaHora)}</td>
         `;
         tablaBody.appendChild(tr);
     });
